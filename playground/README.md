@@ -12,8 +12,17 @@ written to a marker file that the CI job checks.
 
 ## Run it locally
 
+Run from the repository root. The blueprint activates `force-email-two-factor`
+by slug, so the working copy must be mounted into the plugins directory (the
+blueprint installs `two-factor` from wordpress.org but does **not** ship this
+plugin) — mirror the CI command, including the mount:
+
 ```sh
-npx --yes @wp-playground/cli@latest run-blueprint --blueprint=playground/ci-blueprint.json
+rm -f .ci-result
+npx --yes @wp-playground/cli@3.1.43 run-blueprint \
+  --blueprint=playground/ci-blueprint.json \
+  --mount="$PWD:/wordpress/wp-content/plugins/force-email-two-factor"
+cat .ci-result   # expect: FORCE2FA_ASSERT_OK
 ```
 
 The same step runs in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
