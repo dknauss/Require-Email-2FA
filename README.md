@@ -20,6 +20,11 @@ On multisite the plugin can be **network-activated or activated per-site**, and 
 
 Require Email 2FA's dependency on Two Factor is *soft*: the Require Email 2FA plugin activates on its own and does nothing until Two Factor is active. It only displays a prominent admin notice with a one-click installer for the Two Factor plugin. Administrators should pre-install and activate Two Factor or do so immediately after installing and activating Require Email 2FA. Then Require Email 2FA will automatically select emailed passcodes as the primary (default) 2FA method for all users who do not have a different one selected. This enforcement will continue for all existing and new users as long as Require Email 2FA is active.
 
+> [!TIP]
+> **▶ [Try it live in WordPress Playground][playground]** — boots a disposable WordPress with this plugin already active and Two Factor *not yet installed*, so you land on the Plugins screen and see the guided **"Install & activate Two Factor"** notice. A handful of sample users (across roles) are created so you can browse profiles. No local install needed; nothing is saved.
+
+[playground]: https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/dknauss/Require-Email-2FA/main/playground/demo-blueprint.json
+
 ---
 
 ## What it does
