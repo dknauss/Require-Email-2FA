@@ -1,0 +1,46 @@
+{
+    "$schema": "https://playground.wordpress.net/blueprint-schema.json",
+    "login": true,
+    "landingPage": "/wp-admin/plugins.php",
+    "features": {
+        "networking": true
+    },
+    "steps": [
+        {
+            "step": "mkdir",
+            "path": "/wordpress/wp-content/plugins/force-email-two-factor"
+        },
+        {
+            "step": "writeFile",
+            "path": "/wordpress/wp-content/plugins/force-email-two-factor/force-email-two-factor.php",
+            "data": {
+                "resource": "url",
+                "url": "https://raw.githubusercontent.com/dknauss/Require-Email-2FA/main/force-email-two-factor.php"
+            }
+        },
+        {
+            "step": "wp-cli",
+            "command": "wp plugin activate force-email-two-factor"
+        },
+        {
+            "step": "wp-cli",
+            "command": "wp user create alice_editor alice_editor@example.com --role=editor --first_name=Alice --last_name=Editor --display_name='Alice Editor' --user_pass=password"
+        },
+        {
+            "step": "wp-cli",
+            "command": "wp user create bob_author bob_author@example.com --role=author --first_name=Bob --last_name=Author --display_name='Bob Author' --user_pass=password"
+        },
+        {
+            "step": "wp-cli",
+            "command": "wp user create carol_contributor carol_contributor@example.com --role=contributor --first_name=Carol --last_name=Contributor --display_name='Carol Contributor' --user_pass=password"
+        },
+        {
+            "step": "wp-cli",
+            "command": "wp user create dave_subscriber dave_subscriber@example.com --role=subscriber --first_name=Dave --last_name=Subscriber --display_name='Dave Subscriber' --user_pass=password"
+        },
+        {
+            "step": "wp-cli",
+            "command": "wp user create erin_shop erin_shop@example.com --role=subscriber --first_name=Erin --last_name=Shopper --display_name='Erin Shopper' --user_pass=password"
+        }
+    ]
+}
