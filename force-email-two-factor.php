@@ -4,7 +4,6 @@
  * Description:      Requires the Two Factor plugin and makes emailed 2FA the default, required login factor for all users.
  * Author:           Dan Knauss
  * Version:          1.8.0
- * Network:          false
  * Requires PHP:     7.2
  * License:          GPL-2.0-or-later
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
