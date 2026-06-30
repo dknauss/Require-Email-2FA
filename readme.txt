@@ -4,19 +4,20 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Requires Plugins: two-factor
-Stable tag: 1.7.0
+Stable tag: 1.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Requires the Two Factor plugin and makes emailed 2FA codes mandatory for all users by default, with per-role exclusions.
+Requires the Two Factor plugin and makes emailed 2FA the default, required login factor for all users, with per-role exclusions.
 
 == Description ==
 
-Requires the [Two Factor](https://wordpress.org/plugins/two-factor/) plugin
-(which must be installed and active) and makes its emailed 2FA codes a mandatory
-baseline for every user — so the login challenge appears even for accounts that
-never set up two-factor. Install network-wide or per-site on multisite.
+Builds on the [Two Factor](https://wordpress.org/plugins/two-factor/) plugin and
+makes its emailed 2FA codes a mandatory baseline for every user — so the login
+challenge appears even for accounts that never set up two-factor. Two Factor must
+be active for any enforcement to happen; if it is not, this plugin activates but
+stays a no-op and shows an admin notice with a one-click installer. Install
+network-wide or per-site on multisite.
 
 It does two things:
 
@@ -36,8 +37,11 @@ It does two things:
 
 = Plugin dependencies =
 
-* **Required:** Two Factor (`two-factor`). Declared via the `Requires Plugins`
-  header, so WordPress 6.5+ blocks activation until it is installed and active.
+* **Required:** Two Factor (`two-factor`). This plugin activates on its own and
+  no-ops until Two Factor is active; while it is missing, an admin notice warns
+  that 2FA is not being enforced and offers a one-click install/activate from
+  WordPress.org. (Through 1.7.0 this was a hard `Requires Plugins` gate that
+  blocked activation; 1.8.0 replaced it with this softer, guided flow.)
 * **Recommended:** WebAuthn Provider for Two Factor (`two-factor-provider-webauthn`)
   for passkeys / hardware security keys. Optional — this plugin works without it.
 * **Testing only:** WP Mail Logging (`wp-mail-logging`) to read 2FA email codes in
@@ -83,13 +87,15 @@ Before production activation:
 
 == Frequently Asked Questions ==
 
-= Why does it require WordPress 6.5+? =
+= Does it still require the Two Factor plugin? =
 
-The `Requires Plugins` header that gates activation on the Two Factor plugin was
-added in WordPress 6.5; on older versions that header is simply ignored. The
-plugin's own runtime guard still prevents fatals if Two Factor is missing, so it
-degrades safely below 6.5 — it just can't *block* activation there. If you need to
-run on older WordPress, you can lower `Requires at least` and rely on that guard.
+Yes — Two Factor (`two-factor`) provides the Email provider this plugin makes
+mandatory, so nothing is enforced without it. As of 1.8.0 the dependency is no
+longer a hard activation gate. This plugin activates on its own, no-ops while Two
+Factor is inactive, and shows an admin notice with a one-click install/activate
+button. The `Requires at least: 6.5` floor is now just a conservative baseline,
+not a technical requirement of the (removed) `Requires Plugins` header — you can
+lower it if you need to run on older WordPress.
 
 = What if email delivery breaks and users are locked out? =
 
@@ -149,6 +155,18 @@ that. API bypasses are intentionally narrow: only allowlisted accounts using
 Application Passwords can skip the interactive challenge.
 
 == Changelog ==
+
+= 1.8.0 =
+* Replace the hard `Requires Plugins: two-factor` activation gate with a soft
+  dependency: the plugin now activates on its own and no-ops until Two Factor is
+  active, instead of failing activation with a "required plugins are missing"
+  error.
+* Add an admin notice, shown while Two Factor is inactive, warning that 2FA is
+  NOT being enforced — with a one-click button that installs and activates Two
+  Factor from WordPress.org (capability- and nonce-checked).
+* Fold the enforcement filter's provider check into a single
+  `force_2fa_dependency_met()` helper, reused by the notice.
+* Tests: cover the nag gating and the required-capability logic.
 
 = 1.7.0 =
 * No plugin runtime changes since 1.6.1 — this release is packaging and docs only.

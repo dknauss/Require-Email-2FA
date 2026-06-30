@@ -14,6 +14,7 @@ $GLOBALS['__force2fa_filters']        = array(); // hook => override return valu
 $GLOBALS['__force2fa_users']          = array(); // id => WP_User
 $GLOBALS['__force2fa_did_action']     = array(); // hook => count
 $GLOBALS['__force2fa_added_filters']  = array(); // [ tag, cb, priority, accepted_args ]
+$GLOBALS['__force2fa_added_actions']  = array(); // [ tag, cb, priority, accepted_args ]
 
 // --- WordPress function stubs -------------------------------------------------
 
@@ -21,6 +22,14 @@ $GLOBALS['__force2fa_added_filters']  = array(); // [ tag, cb, priority, accepte
 // registration so force_2fa_register_hooks() can be asserted.
 function add_filter( $tag = '', $cb = null, $priority = 10, $accepted_args = 1 ) {
 	$GLOBALS['__force2fa_added_filters'][] = array( $tag, $cb, $priority, $accepted_args );
+	return true;
+}
+
+// Mirrors add_filter: records the registration so force_2fa_register_hooks() can
+// be asserted. The admin callbacks themselves are glue (notice HTML, plugin
+// installer) and are exercised by the Playground integration test, not here.
+function add_action( $tag = '', $cb = null, $priority = 10, $accepted_args = 1 ) {
+	$GLOBALS['__force2fa_added_actions'][] = array( $tag, $cb, $priority, $accepted_args );
 	return true;
 }
 

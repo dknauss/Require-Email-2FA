@@ -11,8 +11,10 @@ and locks down the XML-RPC / REST API-login path to a named allowlist of service
 accounts. On multisite it can be **network-activated or activated per-site**, and
 an optional `mu-loader.php` makes it un-deactivatable.
 
-It builds on the [Two Factor plugin](https://wordpress.org/plugins/two-factor/) —
-a declared `Requires Plugins` dependency that must be installed and active.
+It builds on the [Two Factor plugin](https://wordpress.org/plugins/two-factor/),
+which must be active for any enforcement to happen. The dependency is *soft*: this
+plugin activates on its own and no-ops until Two Factor is active, showing an admin
+notice with a one-click installer in the meantime.
 
 ---
 
@@ -231,8 +233,10 @@ the line (or set it to `false`) to re-enable enforcement.
 ## Requirements & dependencies
 
 - **Required:** the [Two Factor](https://wordpress.org/plugins/two-factor/) plugin
-  (`two-factor`). Declared via the `Requires Plugins` header (WP 6.5+), so
-  WordPress blocks activation until Two Factor is installed and active.
+  (`two-factor`). Soft dependency: this plugin activates on its own and no-ops
+  until Two Factor is active, surfacing an admin notice with a one-click
+  install/activate button while it is missing. (Through 1.7.0 this was a hard
+  `Requires Plugins` gate that blocked activation; 1.8.0 made it soft.)
 - **Recommended:** [WebAuthn Provider for Two Factor](https://wordpress.org/plugins/two-factor-provider-webauthn/)
   (`two-factor-provider-webauthn`) for passkeys / hardware keys. Optional — this
   plugin works without it.
@@ -260,17 +264,17 @@ does nothing else.
 
 - **Users with no 2FA yet:** email enforcement applies at their next login.
 
-- **Two Factor not active:** on WordPress 6.5+ the `Requires Plugins` header
-  **blocks activation** until Two Factor is installed and active. On older
-  WordPress (header ignored) or if Two Factor is later disabled, the runtime
-  `class_exists( 'Two_Factor_Email' )` guard makes the plugin a **safe no-op** — no
-  errors, no enforcement.
+- **Two Factor not active:** this plugin still activates, but the runtime
+  `force_2fa_dependency_met()` guard (a `class_exists( 'Two_Factor_Email' )` check)
+  makes it a **safe no-op** — no errors, no enforcement — and an admin notice warns
+  that 2FA is not being enforced, with a one-click button to install/activate Two
+  Factor. The same guard covers the case where Two Factor is disabled later.
 
 - **A different 2FA plugin** (Wordfence Login Security, WP 2FA, miniOrange, Duo,
   etc.): this plugin **does not integrate with or affect them** — they don't expose
-  Two Factor's hooks. A competing 2FA plugin also does **not** satisfy the
-  `Requires Plugins: two-factor` dependency, so on WP 6.5+ this plugin can't be
-  activated without the actual Two Factor plugin present.
+  Two Factor's hooks. A competing 2FA plugin also does **not** satisfy this
+  dependency: without the actual Two Factor plugin active, this plugin stays a
+  no-op and keeps prompting you to install it.
 
 > ⚠️ **Don't run two 2FA enforcement stacks at once.** If both Two Factor (with this
 > plugin) and a separate 2FA plugin gate the login flow, you risk double prompts or
@@ -289,7 +293,7 @@ won't actually take effect.
   users without a stronger factor can be locked out until mail is fixed or
   `FORCE_2FA_DISABLE` is enabled.
 - **Only the Two Factor plugin is enforced.** Other 2FA plugins are not affected,
-  and they do not satisfy the `Requires Plugins: two-factor` dependency.
+  and they do not satisfy the Two Factor dependency this plugin needs.
 - **Per-site multisite activation is not network-wide enforcement.** Users are
   network-global, so use Network Activate or the optional mu-loader for a true
   network-wide guarantee.

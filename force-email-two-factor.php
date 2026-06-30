@@ -1,17 +1,21 @@
 <?php
 /**
  * Plugin Name: Require Email 2FA
- * Description:      Requires the Two Factor plugin and makes emailed 2FA codes mandatory for all users by default.
+ * Description:      Requires the Two Factor plugin and makes emailed 2FA the default, required login factor for all users.
  * Author:           Dan Knauss
- * Version:          1.7.0
+ * Version:          1.8.0
  * Network:          false
  * Requires PHP:     7.2
- * Requires Plugins: two-factor
  * License:          GPL-2.0-or-later
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
  *
- * Hard dependency: the Two Factor plugin (slug "two-factor"). The Requires
- * Plugins header (WP 6.5+) blocks activation until it is present and active.
+ * Soft dependency: the Two Factor plugin (slug "two-factor"). This plugin
+ * activates on its own and then no-ops safely until Two Factor is active — every
+ * enforcement guard below bails via force_2fa_dependency_met(). While Two Factor
+ * is missing, an admin notice warns that 2FA is NOT being enforced and offers a
+ * one-click install/activate from WordPress.org. (Earlier versions used the hard
+ * "Requires Plugins" header, which blocked activation entirely; that was dropped
+ * so first-run is a guided fix rather than a dead-end activation error.)
  * Recommended companion: "two-factor-provider-webauthn" (passkeys / hardware
  * keys) — optional; this plugin works without it. "wp-mail-logging" is only a
  * testing aid for reading 2FA codes without a real mail server.
@@ -75,8 +79,60 @@ if ( defined( 'FORCE_2FA_DISABLE' ) && FORCE_2FA_DISABLE ) {
 if ( defined( 'FORCE_2FA_LOADED' ) ) {
 	return;
 }
-define( 'FORCE_2FA_LOADED', '1.7.0' );
+define( 'FORCE_2FA_LOADED', '1.8.0' );
 // @codeCoverageIgnoreEnd
+
+/**
+ * The Two Factor plugin's main file, relative to the plugins directory.
+ *
+ * Used both to detect an existing (possibly inactive) install on disk and as the
+ * target passed to activate_plugin().
+ */
+const FORCE_2FA_TWO_FACTOR_PLUGIN_FILE = 'two-factor/two-factor.php';
+
+/**
+ * Whether the Two Factor dependency is present and loaded.
+ *
+ * Single source of truth for "can we enforce?": the enforcement filter and the
+ * admin nag both key off this. We probe the Email provider class specifically —
+ * the exact symbol the enforcement filter appends — so a "met" result guarantees
+ * the provider we inject can actually be resolved.
+ *
+ * @return bool True when the Two Factor plugin's Email provider is available.
+ */
+function force_2fa_dependency_met() {
+	return class_exists( 'Two_Factor_Email' );
+}
+
+/**
+ * Whether to show the "dependency missing" admin notice.
+ *
+ * Pure decision split out from the notice glue so the gating is unit-tested: nag
+ * only when the dependency is absent AND the current user could do something about
+ * it (manage plugins). A user who can't manage plugins gets no actionable notice.
+ *
+ * @param bool $dependency_met  Result of force_2fa_dependency_met().
+ * @param bool $user_can_manage Whether the current user can activate plugins.
+ * @return bool True if the notice should be rendered.
+ */
+function force_2fa_should_nag( $dependency_met, $user_can_manage ) {
+	return ! $dependency_met && (bool) $user_can_manage;
+}
+
+/**
+ * The capability required to satisfy the dependency from the admin notice.
+ *
+ * If Two Factor is already on disk (just inactive) the user only needs to
+ * activate it; otherwise an install is required, which is a higher bar
+ * (network-admin-only on multisite). Split out so the authorization rule is
+ * unit-tested independently of the install glue.
+ *
+ * @param bool $already_installed Whether two-factor/two-factor.php exists on disk.
+ * @return string The required capability slug.
+ */
+function force_2fa_required_install_cap( $already_installed ) {
+	return $already_installed ? 'activate_plugins' : 'install_plugins';
+}
 
 /**
  * Roles to EXCLUDE from forced two-factor.
@@ -204,7 +260,7 @@ function force_2fa_filter_enabled_providers( $enabled_providers, $user_id ) {
 	// Plugin gone / provider unregistered: do not touch the list. (Defensive guard
 	// for when the Two Factor plugin is absent; unit tests always have the provider
 	// class present, so this safety branch stays uncovered by design.)
-	if ( ! class_exists( 'Two_Factor_Email' ) ) {
+	if ( ! force_2fa_dependency_met() ) {
 		return $enabled_providers;
 	}
 
@@ -357,8 +413,102 @@ function force_2fa_filter_api_login_enable( $enable, $user ) {
 	// (a) ...and only for named service accounts.
 	return force_2fa_user_is_api_allowlisted( $user );
 }
+// The notice and the one-click installer are admin glue: they call WordPress
+// admin/upgrader APIs that the zero-dependency unit bootstrap does not stub, and
+// are only ever invoked through the admin hooks (never at load), so they cannot
+// fatally a unit run. Their behaviour is exercised by the Playground integration
+// test (a real activation with Two Factor absent), mirroring the load-time guards
+// above. The pure decisions they delegate to — force_2fa_should_nag() and
+// force_2fa_required_install_cap() — are unit-tested directly.
+// @codeCoverageIgnoreStart
+
 /**
- * Register this plugin's WordPress filter hooks.
+ * Admin notice shown when Two Factor is not active.
+ *
+ * Replaces the old hard `Requires Plugins` activation gate: this plugin now
+ * activates immediately and degrades to a no-op (the enforcement filter bails via
+ * force_2fa_dependency_met()), so the notice must be loud — while it shows, NO
+ * two-factor is being enforced. Offers a one-click install/activate of Two Factor
+ * straight from the WordPress.org repository.
+ */
+function force_2fa_dependency_notice() {
+	if ( ! force_2fa_should_nag( force_2fa_dependency_met(), current_user_can( 'activate_plugins' ) ) ) {
+		return;
+	}
+
+	$action      = 'force_2fa_install_two_factor';
+	$install_url = wp_nonce_url( admin_url( 'admin-post.php?action=' . $action ), $action );
+
+	printf(
+		'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p><a href="%3$s" class="button button-primary">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
+		esc_html__( 'Require Email 2FA is not enforcing yet.', 'force-email-two-factor' ),
+		esc_html__( 'It needs the Two Factor plugin to be installed and active. Until then, two-factor is NOT being enforced for any user.', 'force-email-two-factor' ),
+		esc_url( $install_url ),
+		esc_html__( 'Install &amp; activate Two Factor', 'force-email-two-factor' ),
+		esc_url( 'https://wordpress.org/plugins/two-factor/' ),
+		esc_html__( 'Learn more', 'force-email-two-factor' )
+	);
+}
+
+/**
+ * Handle the one-click "Install & activate Two Factor" action.
+ *
+ * Installs the plugin from the WordPress.org repository if it is not already on
+ * disk, then activates it, then returns to the Plugins screen (where the now-met
+ * dependency makes the notice disappear). Capability is checked against the
+ * minimum the situation requires (activate vs. install) and the nonce is verified
+ * before anything runs. On any upgrader error we wp_die() with WordPress's
+ * standard back-linked error page rather than leaving the user on a blank screen.
+ */
+function force_2fa_handle_install_two_factor() {
+	check_admin_referer( 'force_2fa_install_two_factor' );
+
+	$plugin_file = FORCE_2FA_TWO_FACTOR_PLUGIN_FILE;
+	$installed   = file_exists( WP_PLUGIN_DIR . '/' . $plugin_file );
+
+	if ( ! current_user_can( force_2fa_required_install_cap( $installed ) ) ) {
+		wp_die( esc_html__( 'You do not have permission to install or activate plugins.', 'force-email-two-factor' ) );
+	}
+
+	require_once ABSPATH . 'wp-admin/includes/file.php';
+	require_once ABSPATH . 'wp-admin/includes/misc.php';
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
+	require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+
+	if ( ! $installed ) {
+		$api = plugins_api(
+			'plugin_information',
+			array(
+				'slug'   => 'two-factor',
+				'fields' => array( 'sections' => false ),
+			)
+		);
+		if ( is_wp_error( $api ) ) {
+			wp_die( esc_html( $api->get_error_message() ) );
+		}
+
+		// WP_Ajax_Upgrader_Skin keeps the upgrader silent — no HTML echoed into our
+		// redirect response — while still collecting any errors.
+		$upgrader = new Plugin_Upgrader( new WP_Ajax_Upgrader_Skin() );
+		$result   = $upgrader->install( $api->download_link );
+		if ( is_wp_error( $result ) ) {
+			wp_die( esc_html( $result->get_error_message() ) );
+		}
+	}
+
+	$activated = activate_plugin( $plugin_file );
+	if ( is_wp_error( $activated ) ) {
+		wp_die( esc_html( $activated->get_error_message() ) );
+	}
+
+	wp_safe_redirect( admin_url( 'plugins.php' ) );
+	exit;
+}
+// @codeCoverageIgnoreEnd
+
+/**
+ * Register this plugin's WordPress hooks.
  *
  * Called once at load (below); also unit-tested directly, so the registrations
  * are exercised under coverage rather than only at include time.
@@ -366,6 +516,10 @@ function force_2fa_filter_api_login_enable( $enable, $user ) {
 function force_2fa_register_hooks() {
 	add_filter( 'two_factor_enabled_providers_for_user', 'force_2fa_filter_enabled_providers', 10, 2 );
 	add_filter( 'two_factor_user_api_login_enable', 'force_2fa_filter_api_login_enable', 10, 2 );
+
+	// Soft-dependency UX: nag + one-click installer when Two Factor is absent.
+	add_action( 'admin_notices', 'force_2fa_dependency_notice' );
+	add_action( 'admin_post_force_2fa_install_two_factor', 'force_2fa_handle_install_two_factor' );
 }
 
 force_2fa_register_hooks();
