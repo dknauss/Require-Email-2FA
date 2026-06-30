@@ -1,7 +1,7 @@
 {
     "$schema": "https://playground.wordpress.net/blueprint-schema.json",
-    "landingPage": "/wp-admin/profile.php",
-    "login": true,
+    "landingPage": "/wp-login.php?redirect_to=/wp-admin/profile.php",
+    "login": false,
     "features": {
         "networking": true
     },
@@ -35,6 +35,10 @@
             "options": {
                 "activate": false
             }
+        },
+        {
+            "step": "wp-cli",
+            "command": "wp user update 1 --user_pass=password --user_email=admin@example.com --display_name=Admin"
         },
         {
             "step": "mkdir",

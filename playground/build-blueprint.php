@@ -72,8 +72,8 @@ $mu_dir = '/wordpress/wp-content/mu-plugins';
 
 $blueprint = array(
 	'$schema'     => 'https://playground.wordpress.net/blueprint-schema.json',
-	'landingPage' => '/wp-admin/profile.php',
-	'login'       => true,
+	'landingPage' => '/wp-login.php?redirect_to=/wp-admin/profile.php',
+	'login'       => false,
 	'features'    => array( 'networking' => true ), // allow wordpress.org downloads
 	'steps'       => array(
 		array(
@@ -90,6 +90,10 @@ $blueprint = array(
 			'step'       => 'installPlugin',
 			'pluginData' => array( 'resource' => 'wordpress.org/plugins', 'slug' => 'wp-mail-logging' ),
 			'options'    => array( 'activate' => false ),
+		),
+		array(
+			'step'    => 'wp-cli',
+			'command' => 'wp user update 1 --user_pass=password --user_email=admin@example.com --display_name=Admin',
 		),
 		array( 'step' => 'mkdir', 'path' => $dir ),
 		array( 'step' => 'mkdir', 'path' => $mu_dir ),
