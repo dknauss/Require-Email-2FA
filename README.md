@@ -6,24 +6,28 @@
 [![PHP](https://img.shields.io/badge/PHP-7.2%2B-777bb4?logo=php&logoColor=white)](https://www.php.net/)
 [![Requires Plugin: Two Factor](https://img.shields.io/badge/requires-Two%20Factor-3858e9.svg)](https://wordpress.org/plugins/two-factor/)
 
-A WordPress plugin that makes two-factor authentication mandatory for every user,
-and locks down the XML-RPC / REST API-login path to a named allowlist of service
-accounts. On multisite it can be **network-activated or activated per-site**, and
-an optional `mu-loader.php` makes it un-deactivatable.
+This is a Multisite compatible, single-purpose, WordPress utility plugin with no admin user interface. It's intended to help site owners and maintainers rapidly roll out and enforce a mandatory two-factor authentication policy on WordPress sites or networks that may have many users — in the simplest and least disruptive way.
 
-It builds on the [Two Factor plugin](https://wordpress.org/plugins/two-factor/),
-which must be active for any enforcement to happen. The dependency is *soft*: this
-plugin activates on its own and no-ops until Two Factor is active, showing an admin
-notice with a one-click installer in the meantime.
+Require Email 2FA imposes three requirements site- or network-wide: 
+
+1. The [Two Factor plugin](https://wordpress.org/plugins/two-factor/) must be installed and activated.
+2. All users must use Two-Factor to log in. (Exceptions can be set with a constant or filter.) 
+3. Users who do not have a different method selected in their two-factor settings will receive time-based, one-time passcodes by email.
+
+The plugin also locks down the XML-RPC / REST API-login path. (A named allowlist of service accounts can be added with a constant or filter.) 
+
+On multisite the plugin can be **network-activated or activated per-site**, and an optional `mu-loader.php` file can be moved to the `/mu-plugins` folder to makes it un-deactivatable within the WordPress admin interface.
+
+Require Email 2FA's dependency on two-factor is *soft*: the Require Email 2FA plugin activates on its own and does nothing until Two Factor is active. It only displays a prominent admin notice with a one-click installer for the Two Factor plugin. Administrators should pre-install and activate Two-Factor or do so immediately after installing and activating Require Email 2FA. Then Require Email 2FA will automatically select emailed passcodes as the primary (default) 2FA method for all users who do not have a different one selected. This enforcement will continue for all existing and new users as long as Require Email 2FA is active.
 
 ---
 
 ## What it does
 
-1. **Forces 2FA for everyone (by default).** It ensures the always-available,
+1. **Forces 2FA for everyone (by default).** It ensures the (assumed) always-available,
    zero-setup **Email** provider is enabled for every user, so the login
    challenge appears for all accounts — including ones that never configured 2FA.
-   Enforcement can be scoped with **per-role exclusions** (see Configuration).
+   Enforcement can be scoped with **per-role exclusions**. (See Configuration.)
 
    It *appends* Email rather than replacing the provider list, so users who set
    up a stronger factor (TOTP, hardware key / WebAuthn) keep it as their primary
@@ -36,6 +40,9 @@ notice with a one-click installer in the meantime.
      login password).
 
    Everyone else is denied on the API path.
+
+> [!IMPORTANT]
+> For security hardening purposes, it's strongly recommended that you set up Require Email 2FA as a mu-plugin if you establish user role exclusions and/or an API user allowlist.
 
 ---
 
@@ -54,12 +61,8 @@ wp-content/plugins/force-email-two-factor/force-email-two-factor.php
 * **Per-site activate** (a single site's Plugins screen) — enforces only when the
   plugin is active in the **current request's** site context.
 
-  ⚠️ On multisite, users and their Two Factor settings are network-global, but
-  this plugin only registers its filters where it is active. So per-site
-  activation keys enforcement off the **login entry point, not the user** — a
-  global user could authenticate via a site where the plugin is inactive and skip
-  enforcement. Use per-site only for "this site's team must use 2FA"; use Network
-  Activate for a true network-wide guarantee.
+  > [!WARNING]
+  > On multisite, users and their Two Factor settings are network-global, but this plugin only registers its filters where it is active. So per-site activation keys enforcement off the **login entry point, not the user** — a global user could authenticate via a site where the plugin is inactive and skip enforcement. Use per-site only for "this site's team must use 2FA"; use Network Activate for a true network-wide guarantee.
 
 On single-site WordPress, just activate it normally.
 
@@ -67,7 +70,7 @@ On single-site WordPress, just activate it normally.
 
 WordPress only auto-loads *flat* PHP files in `wp-content/mu-plugins/` — it does
 **not** descend into subdirectories. So you keep the full plugin folder where it
-is and drop only the one-line loader alongside it:
+is and drop only the included one-line loader alongside it:
 
 1. Keep the plugin at `wp-content/plugins/force-email-two-factor/` (you can leave
    it activated normally, or not — the loader pulls it in either way).
@@ -215,15 +218,13 @@ the endpoint, so leave this off unless you specifically need XML-RPC shut down.
 
 ## Emergency kill switch
 
-If email delivery breaks and users are locked out, disable **all** enforcement in
-this file without deleting it by adding to `wp-config.php`:
+If email delivery breaks and users are locked out, you may disable **all** enforcement in the Require Email 2FA plugin without deleting it by adding the following line to your site's `wp-config.php` file:
 
 ```php
 define( 'FORCE_2FA_DISABLE', true );
 ```
 
-The plugin checks this at load time and registers nothing when it's set. Remove
-the line (or set it to `false`) to re-enable enforcement.
+The plugin checks this constant at load time and registers nothing when it's set. Remove the line (or set it to `false`) to re-enable enforcement.
 
 ---
 
@@ -265,6 +266,9 @@ the line (or set it to `false`) to re-enable enforcement.
 - Application Passwords enabled (WordPress core, on by default over HTTPS) for any
   allowlisted service account.
 
+> [!TIP]
+> Ensure your WordPress site and/or host's method for sending transactional emails is properly configured and effective. Otherwise, you and your users may be locked out of the site when the emails passcodes do not arrive or land in spam folders. 
+
 ---
 
 ## Compatibility & interaction with other 2FA setups
@@ -294,14 +298,11 @@ does nothing else.
   dependency: without the actual Two Factor plugin active, this plugin stays a
   no-op and keeps prompting you to install it.
 
-> ⚠️ **Don't run two 2FA enforcement stacks at once.** If both Two Factor (with this
-> plugin) and a separate 2FA plugin gate the login flow, you risk double prompts or
-> lockouts. Pick one stack; this plugin assumes that stack is Two Factor.
+> [!CAUTION]
+> **Don't run two 2FA enforcement stacks at once.** If both Two Factor (with this plugin) and a separate 2FA plugin gate the login flow, you risk double prompts or lockouts. Pick one stack; this plugin assumes that stack is Two Factor.
 
-Edge case: if an admin has deliberately unregistered the Email provider via the
-`two_factor_providers` filter, the provider class still exists, so email is still
-appended — but Two Factor won't resolve it as a usable factor, so email enforcement
-won't actually take effect.
+> [!NOTE]
+> **Edge case:** if an admin has deliberately unregistered the Email provider via the `two_factor_providers` filter, the provider class still exists, so email is still appended — but Two Factor won't resolve it as a usable factor, so email enforcement won't actually take effect.
 
 ---
 
