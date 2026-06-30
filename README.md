@@ -221,6 +221,10 @@ the line (or set it to `false`) to re-enable enforcement.
 
 ## Development
 
+> **PHP version:** the *plugin* supports PHP 7.2+ (enforced by the lint matrix and
+> PHPCompatibility). The *dev tooling* (PHPUnit 11) requires **PHP 8.2+**, so run
+> `composer install` and the test suite on PHP 8.2 or newer.
+
 Tests run on a zero-dependency stub bootstrap (no WordPress install required):
 
 - **Unit** — the security-critical decision logic: role exclusions, the API-login

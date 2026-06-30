@@ -41,6 +41,11 @@ jobs:
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: PHPCS (PHPCompatibility, testVersion 7.2-)
         run: vendor/bin/phpcs
+      - name: Playground blueprint is regenerated from source (no drift)
+        run: |
+          php playground/build-blueprint.php
+          git diff --exit-code -- playground/blueprint.json \
+            || { echo "::error::playground/blueprint.json is stale — run: php playground/build-blueprint.php"; exit 1; }
 
   test:
     name: Unit + integration tests (PHP ${{ matrix.php }})

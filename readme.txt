@@ -2,7 +2,7 @@
 Contributors: dknauss
 Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
-Tested up to: 6.5
+Tested up to: 7.0
 Requires PHP: 7.2
 Requires Plugins: two-factor
 Stable tag: 1.6.1
