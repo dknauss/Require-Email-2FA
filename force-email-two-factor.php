@@ -55,6 +55,12 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// Load-time guards and the load marker run once when the file is included, before
+// PHPUnit starts measuring per-test coverage, so they are exempt from unit
+// coverage. Their behaviour is exercised by the Playground integration test
+// (real activation) and by the local multisite verification.
+// @codeCoverageIgnoreStart
+
 // If the emergency kill switch is set, register nothing at all and bail early.
 // This is checked at load time so a broken-mail recovery is a single wp-config
 // edit away, with no code changes here.
@@ -69,6 +75,7 @@ if ( defined( 'FORCE_2FA_LOADED' ) ) {
 	return;
 }
 define( 'FORCE_2FA_LOADED', '1.6.1' );
+// @codeCoverageIgnoreEnd
 
 /**
  * Roles to EXCLUDE from forced two-factor.
@@ -168,10 +175,14 @@ function force_2fa_user_is_exempt( WP_User $user ) {
  *                  when that provider exists.
  */
 function force_2fa_filter_enabled_providers( $enabled_providers, $user_id ) {
-	// Plugin gone / provider unregistered: do not touch the list.
+	// Plugin gone / provider unregistered: do not touch the list. Defensive guard
+	// for when the Two Factor plugin is absent; under unit tests the provider class
+	// is always present, so this safety branch is coverage-exempt.
+	// @codeCoverageIgnoreStart
 	if ( ! class_exists( 'Two_Factor_Email' ) ) {
 		return $enabled_providers;
 	}
+	// @codeCoverageIgnoreEnd
 
 	// Excluded roles: don't force Email (their own 2FA, if any, is untouched).
 	$user = get_userdata( $user_id );
@@ -191,7 +202,9 @@ function force_2fa_filter_enabled_providers( $enabled_providers, $user_id ) {
 
 	return $enabled_providers;
 }
+// @codeCoverageIgnoreStart -- Hook registration runs at load; the wiring is verified by the Playground integration test.
 add_filter( 'two_factor_enabled_providers_for_user', 'force_2fa_filter_enabled_providers', 10, 2 );
+// @codeCoverageIgnoreEnd
 
 /**
  * Service-account allowlist for non-interactive API logins.
@@ -314,12 +327,14 @@ function force_2fa_filter_api_login_enable( $enable, $user ) {
 	// (a) ...and only for named service accounts.
 	return force_2fa_user_is_api_allowlisted( $user );
 }
+// @codeCoverageIgnoreStart -- Hook registration runs at load; the wiring is verified by the Playground integration test.
 add_filter(
 	'two_factor_user_api_login_enable',
 	'force_2fa_filter_api_login_enable',
 	10,
 	2
 );
+// @codeCoverageIgnoreEnd
 
 /*
  * Optional, stronger hardening — disable XML-RPC entirely.

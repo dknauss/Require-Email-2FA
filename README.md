@@ -1,6 +1,7 @@
 # Force Email Two-Factor (Enforcement)
 
 [![CI](https://github.com/dknauss/force-email-two-factor/actions/workflows/ci.yml/badge.svg)](https://github.com/dknauss/force-email-two-factor/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/dknauss/force-email-two-factor/graph/badge.svg)](https://codecov.io/gh/dknauss/force-email-two-factor)
 [![License: GPL v2](https://img.shields.io/badge/License-GPLv2-blue.svg)](LICENSE)
 ![WordPress](https://img.shields.io/badge/WordPress-6.5%2B-21759b?logo=wordpress&logoColor=white)
 ![PHP](https://img.shields.io/badge/PHP-7.2%2B-777bb4?logo=php&logoColor=white)
