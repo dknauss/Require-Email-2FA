@@ -66,8 +66,12 @@ It does two things:
    * Activate per-site to enforce only on that site. Note: enforcement keys off
      the login entry point, not the (network-global) user, so per-site is not a
      network-wide guarantee.
-3. Optional "cannot be deactivated" mode: copy the bundled `mu-loader.php` into
-   `wp-content/mu-plugins/`. It force-loads the plugin on every request.
+3. Optional "cannot be deactivated" mode: WordPress only auto-loads flat PHP
+   files in `wp-content/mu-plugins/` (it does not descend into subdirectories), so
+   keep the full plugin folder in `wp-content/plugins/force-email-two-factor/` and
+   copy ONLY the bundled `mu-loader.php` into `wp-content/mu-plugins/`. The loader
+   then force-loads the plugin on every request. To disable, remove the loader
+   file. A `FORCE_2FA_LOADED` guard makes it safe to also activate normally.
 
 The [Two Factor](https://wordpress.org/plugins/two-factor/) plugin must be
 installed and active. Confirm outbound email (SMTP) delivers reliably before
@@ -167,6 +171,8 @@ Application Passwords can skip the interactive challenge.
 * Fold the enforcement filter's provider check into a single
   `force_2fa_dependency_met()` helper, reused by the notice.
 * Tests: cover the nag gating and the required-capability logic.
+* Docs: clarify the mu-plugin setup (flat loader in `mu-plugins/`, full plugin
+  stays in `plugins/`) with a directory layout and how to disable it.
 
 = 1.7.0 =
 * No plugin runtime changes since 1.6.1 — this release is packaging and docs only.

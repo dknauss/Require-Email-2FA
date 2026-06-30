@@ -65,11 +65,29 @@ On single-site WordPress, just activate it normally.
 
 ### Optional: "cannot be deactivated" mode (mu-loader)
 
-To force-load the plugin so it can't be turned off from the admin UI, copy the
-included `mu-loader.php` into `wp-content/mu-plugins/` (a flat file). It
-`require`s the plugin from `wp-content/plugins/force-email-two-factor/`. Safe to
-combine with normal/network activation — a `FORCE_2FA_LOADED` re-load guard
-prevents double execution. The `FORCE_2FA_DISABLE` kill switch still applies.
+WordPress only auto-loads *flat* PHP files in `wp-content/mu-plugins/` — it does
+**not** descend into subdirectories. So you keep the full plugin folder where it
+is and drop only the one-line loader alongside it:
+
+1. Keep the plugin at `wp-content/plugins/force-email-two-factor/` (you can leave
+   it activated normally, or not — the loader pulls it in either way).
+2. Copy the bundled `mu-loader.php` into `wp-content/mu-plugins/` (create that
+   directory if it doesn't exist; rename the file if you like).
+
+```text
+wp-content/
+├── mu-plugins/
+│   └── mu-loader.php                  ← only this flat file is auto-loaded
+└── plugins/
+    └── force-email-two-factor/        ← full plugin stays here
+        ├── force-email-two-factor.php
+        └── mu-loader.php              ← copy THIS up to mu-plugins/
+```
+
+The loader `require`s the plugin from `wp-content/plugins/force-email-two-factor/`,
+so the plugin folder must remain in place. A `FORCE_2FA_LOADED` re-load guard makes
+it safe to also activate normally. To disable, remove the loader file from
+`mu-plugins/`. The `FORCE_2FA_DISABLE` kill switch still applies.
 
 ### Before first activation
 
