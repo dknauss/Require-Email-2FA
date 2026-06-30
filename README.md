@@ -166,3 +166,9 @@ the line (or set it to `false`) to re-enable enforcement.
 - Working outbound email (SMTP) for the Email provider.
 - Application Passwords enabled (WordPress core, on by default over HTTPS) for any
   allowlisted service account.
+
+---
+
+## License
+
+GPL-2.0-or-later. See [LICENSE](LICENSE).

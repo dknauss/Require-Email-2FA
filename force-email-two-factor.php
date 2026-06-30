@@ -8,8 +8,10 @@
  *              Restricts the XML-RPC / REST API-login path to an allowlist of
  *              service accounts, and only when they authenticate with an
  *              Application Password.
- * Author:      —
+ * Author:      Dan Knauss
  * Version:     1.3.0
+ * License:     GPL-2.0-or-later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  *
  * ---------------------------------------------------------------------------
  * INSTALLATION
