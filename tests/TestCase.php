@@ -16,6 +16,7 @@ abstract class TestCase extends BaseTestCase {
 		$GLOBALS['__force2fa_users']         = array();
 		$GLOBALS['__force2fa_did_action']    = array();
 		$GLOBALS['__force2fa_added_filters'] = array();
+		$GLOBALS['__force2fa_added_actions'] = array();
 	}
 
 	/** Register a WP_User that get_userdata() will return for its ID. */
