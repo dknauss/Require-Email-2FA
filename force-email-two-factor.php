@@ -904,9 +904,23 @@ function force_2fa_update_checker( $checker = null ) {
  * Registered on plugins_loaded rather than at file load so the zero-dependency
  * unit-test bootstrap — which records add_action() without ever firing it — never
  * instantiates PUC against WordPress functions it does not stub.
+ *
+ * Runs only in admin/cron/CLI contexts (front-end requests skip it, see below) and
+ * only when self-update is enabled (force_2fa_self_update_enabled()).
  */
 function force_2fa_bootstrap_self_update() {
 	// @codeCoverageIgnoreStart
+	// Update checks and installs happen only in the admin, wp-cron, and WP-CLI
+	// contexts, so skip building Plugin Update Checker on front-end requests — the
+	// bulk of traffic. This trims a plugin-header read plus object construction from
+	// every public request and keeps the updater off the public request path
+	// entirely. PUC hooks admin_init, the plugin-update cron, and
+	// site_transient_update_plugins — all of which fire in these contexts — so both
+	// manual and automatic updates are unaffected.
+	if ( ! is_admin() && ! wp_doing_cron() && ! ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+		return;
+	}
+
 	// Never self-update a working copy under version control. Plugin Update Checker
 	// is vendored (committed), so it is present in a git clone too — but a clone (or
 	// a git worktree, where .git is a file) is updated with `git pull`, and letting
