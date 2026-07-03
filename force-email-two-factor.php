@@ -946,7 +946,11 @@ function force_2fa_bootstrap_self_update() {
 	// (and so PUC itself on the next update). This keeps the reviewed release asset
 	// as the only update payload, which is the documented trust boundary.
 	$vcs_api = $update_checker->getVcsApi();
-	$vcs_api->enableReleaseAssets( '/' . preg_quote( $slug, '/' ) . '\.zip$/i', $vcs_api::REQUIRE_RELEASE_ASSETS );
+	// Anchor both ends: the release asset is named exactly "<slug>.zip", so a
+	// start anchor keeps a differently-prefixed asset (e.g. "x-<slug>.zip") from
+	// also matching. Defense-in-depth — the release trust boundary already
+	// controls what assets exist.
+	$vcs_api->enableReleaseAssets( '/^' . preg_quote( $slug, '/' ) . '\.zip$/i', $vcs_api::REQUIRE_RELEASE_ASSETS );
 
 	force_2fa_update_checker( $update_checker );
 	// @codeCoverageIgnoreEnd
