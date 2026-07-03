@@ -1,0 +1,14 @@
+<?php
+/**
+ * Minimal stubs for the Two Factor plugin — a soft, runtime dependency that is not
+ * present at static-analysis time. Only the surface this plugin actually calls.
+ */
+
+class Two_Factor_Core {
+	/**
+	 * @return array<string, object>
+	 */
+	public static function get_providers() {}
+}
+
+class Two_Factor_Email {}
