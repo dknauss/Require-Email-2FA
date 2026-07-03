@@ -604,8 +604,8 @@ function force_2fa_network_dependency_notice() {
 
 	printf(
 		'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p><a href="%3$s" class="button button-primary">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
-		esc_html__( 'Require Email 2FA is not enforcing network-wide.', 'force-email-two-factor' ),
-		esc_html__( 'It is network-active, but the Two Factor plugin is not network-active — so two-factor is NOT enforced on sites where Two Factor is inactive. Install and network-activate it to close the gap.', 'force-email-two-factor' ),
+		esc_html__( 'Require Email 2FA is not enforcing 2FA by email network-wide.', 'force-email-two-factor' ),
+		esc_html__( 'It is network-active, but the Two Factor plugin is not — so 2FA is not enforced on sites where Two Factor is inactive. Install and network-activate Two Factor to close the gap.', 'force-email-two-factor' ),
 		esc_url( $install_url ),
 		esc_html__( 'Install &amp; network-activate Two Factor', 'force-email-two-factor' ),
 		esc_url( 'https://wordpress.org/plugins/two-factor/' ),
