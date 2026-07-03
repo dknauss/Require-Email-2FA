@@ -62,9 +62,10 @@ It does two things:
 1. Install the plugin folder at
    `wp-content/plugins/force-email-two-factor/` and activate it.
 2. On multisite the plugin is network-only: **Network Activate** it (Network
-   Admin → Plugins). Per-site activation is blocked — the per-site Activate link
-   is hidden, and any programmatic/WP-CLI per-site attempt is refused with a
-   notice. For a true network-wide guarantee, also **network-activate Two
+   Admin → Plugins). The `Network: true` header makes WordPress treat it as
+   network-only, so activating it (admin UI or WP-CLI) always lands network-wide,
+   never on a single site; an activation-hook guard is a header-independent
+   backstop. For a true network-wide guarantee, also **network-activate Two
    Factor**; the Network Admin notice warns you when it isn't.
 3. Optional "cannot be deactivated" mode: WordPress only auto-loads flat PHP
    files in `wp-content/mu-plugins/` (it does not descend into subdirectories), so
@@ -166,10 +167,11 @@ challenge.
 == Changelog ==
 
 = 1.9.0 =
-* Multisite: the plugin is now **network-only**. Per-site activation is blocked
-  (the `Network: true` header hides the per-site Activate link, and an activation
-  guard refuses WP-CLI / programmatic per-site activation), so enforcement can't
-  be left with per-site gaps a network-global user could slip through.
+* Multisite: the plugin is now **network-only**. The `Network: true` header makes
+  WordPress treat it as network-only, so activating it (admin UI or WP-CLI) always
+  lands network-wide, never per-site; an activation-hook guard is a
+  header-independent backstop. This stops enforcement being left with per-site
+  gaps a network-global user could slip through.
 * Add a **Network Admin notice**: when the plugin is network-active but Two Factor
   is not network-active, it warns that 2FA is not enforced network-wide and offers
   a one-click install + network-activate of Two Factor.
@@ -182,7 +184,9 @@ challenge.
   the activation guard only blocks NEW per-site activations, so a super admin is
   nudged to Network Activate an existing per-site install.
 * Tests cover the network nag decision, the network capability rule, the per-site
-  activation block, and the legacy per-site migration warning.
+  activation block, and the legacy per-site migration warning. A real multisite
+  end-to-end check (`bin/multisite-e2e.sh`, run in CI) asserts that activation
+  lands network-wide and the plugin safely no-ops when Two Factor is absent.
 
 = 1.8.1 =
 * Plugin header: add `Plugin URI` and `Text Domain`; set the author to Pixel

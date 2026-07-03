@@ -64,10 +64,14 @@ wp-content/plugins/force-email-two-factor/force-email-two-factor.php
 On multisite this plugin is **network-only** — you **Network Activate** it
 (Network Admin → Plugins), and **per-site activation is blocked**.
 
-* The `Network: true` header hides the per-site *Activate* link.
+* The `Network: true` header makes WordPress treat this as a network-only plugin,
+  so core's `activate_plugin()` promotes **any** activation — admin UI or WP-CLI —
+  to network-wide instead of per-site. That's the primary enforcement.
 * `force_2fa_block_single_site_activation()` (a `register_activation_hook` guard)
-  refuses any per-site activation attempt — including WP-CLI / programmatic ones —
-  rolling it back with a "must be Network Activated" notice.
+  is a header-independent backstop: if a per-site activation is ever reached (e.g.
+  the header is removed), it rolls it back with a "must be Network Activated" notice.
+* This is verified end-to-end on a real multisite by `bin/multisite-e2e.sh` (the
+  `multisite-e2e` CI job).
 
   > [!WARNING]
   > This is deliberate. Users and their Two Factor settings are network-global, so a per-site activation would key enforcement off the **login entry point, not the user** — a global user could authenticate via a site where the plugin was inactive and skip enforcement. Network activation closes that gap.

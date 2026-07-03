@@ -31,9 +31,12 @@
  * Activated (Network Admin → Plugins) and per-site activation is blocked. This is
  * deliberate — enforcement keys off whether the plugin (and Two Factor) is active
  * in the current request's site context, so a per-site install would leave gaps a
- * network-global user could slip through. The "Network: true" header hides the
- * per-site Activate link; force_2fa_block_single_site_activation() is the hard
- * guard that also stops WP-CLI / programmatic per-site activation.
+ * network-global user could slip through. The "Network: true" header makes core
+ * treat this as a network-only plugin, so activate_plugin() promotes ANY
+ * activation (admin UI or WP-CLI) to network-wide instead of per-site — that is
+ * the primary enforcement. force_2fa_block_single_site_activation() (a
+ * register_activation_hook guard) is a header-independent backstop that refuses a
+ * per-site activation if one is ever reached (e.g. the header is removed).
  *
  * For a true network-wide guarantee Two Factor must ALSO be network-active; if it
  * is only site-active (or absent) on some sites, enforcement silently no-ops
@@ -584,13 +587,15 @@ function force_2fa_network_dependency_notice() {
 }
 
 /**
- * Block per-site activation on multisite (this plugin is network-only).
+ * Backstop that blocks per-site activation on multisite (this plugin is network-only).
  *
- * Registered via register_activation_hook(); receives $network_wide. On a per-site
- * activation attempt on multisite we roll the activation back and explain, so
- * enforcement can't be left with per-site gaps a network-global user could slip
- * through. This also stops WP-CLI / programmatic per-site activation, which the
- * "Network: true" header alone does not.
+ * Registered via register_activation_hook(); receives $network_wide. Primary
+ * enforcement is the "Network: true" header — WordPress's activate_plugin()
+ * promotes a network-only plugin to network-wide (via is_network_only_plugin()),
+ * so a per-site activation normally never reaches this hook. This is the
+ * header-independent safety net: it fires only if some path reaches activation
+ * with a per-site scope (e.g. the header is ever removed), rolling the activation
+ * back and explaining, so enforcement can't be left with per-site gaps.
  *
  * @param bool $network_wide Whether the activation is network-wide.
  */
