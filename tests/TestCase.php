@@ -17,6 +17,7 @@ abstract class TestCase extends BaseTestCase {
 		$GLOBALS['__force2fa_did_action']    = array();
 		$GLOBALS['__force2fa_added_filters'] = array();
 		$GLOBALS['__force2fa_added_actions'] = array();
+		unset( $GLOBALS['force_2fa_app_password_user_id'], $GLOBALS['__force2fa_providers'] );
 	}
 
 	/** Register a WP_User that get_userdata() will return for its ID. */
@@ -41,8 +42,17 @@ abstract class TestCase extends BaseTestCase {
 		$this->setFilter( 'force_2fa_api_login_allowlist', $entries );
 	}
 
-	/** Simulate (or not) a successful Application Password authentication. */
-	protected function appPasswordUsed( bool $used = true ): void {
-		$GLOBALS['__force2fa_did_action']['application_password_did_authenticate'] = $used ? 1 : 0;
+	/**
+	 * Simulate an Application Password authentication for a specific user (or none).
+	 *
+	 * Mirrors force_2fa_note_app_password_user() recording the account that core
+	 * authenticated. Pass the authenticating user's ID; $used = false clears it.
+	 */
+	protected function appPasswordUsed( bool $used = true, int $user_id = 0 ): void {
+		if ( $used ) {
+			$GLOBALS['force_2fa_app_password_user_id'] = $user_id;
+		} else {
+			unset( $GLOBALS['force_2fa_app_password_user_id'] );
+		}
 	}
 }
