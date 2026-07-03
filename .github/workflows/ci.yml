@@ -130,3 +130,10 @@ jobs:
           extensions: sqlite3, pdo_sqlite
       - name: Real WordPress update from GitHub Release asset
         run: bash bin/update-e2e.sh
+        env:
+          # Authenticated GitHub API calls (script + Plugin Update Checker):
+          # anonymous requests share a ~60/hr per-IP quota across hosted runners.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A latest release without the zip asset is external release state a PR
+          # cannot influence — skip with a warning on PRs, hard-fail on main.
+          FORCE2FA_UPDATE_E2E_TOLERATE_MISSING_ASSET: ${{ github.event_name == 'pull_request' && '1' || '0' }}
