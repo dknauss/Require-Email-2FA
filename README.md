@@ -302,6 +302,16 @@ The plugin checks this constant at load time and registers nothing when it's set
   The slug and download-asset name derive from the plugin folder, so only a rename
   additionally needs the workflow's `PLUGIN_SLUG` updated to match.
 
+- **Fleet deployment (managed vs. standalone):** the self-updater is on by default
+  (standalone sites patch themselves from GitHub Releases). On sites patched by a
+  central manager — MainWP, Composer, git deploys — turn it off with
+  `define( 'FORCE_2FA_DISABLE_SELF_UPDATE', true );` (or the
+  `force_2fa_self_update_enabled` filter) so each site doesn't independently poll
+  GitHub; your pipeline owns patching and enforcement is unchanged. A
+  **Tools → Site Health** check reports each site's update posture. See
+  [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full managed-vs-standalone
+  guide.
+
 ---
 
 ## Requirements & dependencies
