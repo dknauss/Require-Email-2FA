@@ -433,9 +433,12 @@ request:
   [`playground/ci-blueprint.json`](playground/ci-blueprint.json))
 - **Multisite E2E** — boots a disposable SQLite-backed multisite and asserts
   per-site activation is refused while network activation succeeds.
-- **Update E2E** — boots a disposable SQLite-backed site, copies this working tree
-  as an older installed plugin, forces an update check, and asserts WordPress
-  updates it from the latest GitHub Release `force-email-two-factor.zip` asset.
+- **Update E2E** — boots a disposable SQLite-backed site, installs the committed
+  tree (`git archive`, the release layout) rewritten to an older version, forces
+  an update check, and asserts by exact URL match that WordPress updates it from
+  this repository's latest GitHub Release `force-email-two-factor.zip` asset.
+  E2E tooling (WP-CLI, the SQLite drop-in) is version-pinned and
+  checksum-verified in [`bin/lib/e2e-common.sh`](bin/lib/e2e-common.sh).
 
 The config constants (`FORCE_2FA_EXCLUDED_ROLES`, `FORCE_2FA_API_LOGIN_ALLOWLIST`)
 are read through filter accessors (`force_2fa_excluded_roles`,
