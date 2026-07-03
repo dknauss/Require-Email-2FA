@@ -62,11 +62,10 @@ It does two things:
 1. Install the plugin folder at
    `wp-content/plugins/force-email-two-factor/` and activate it.
 2. On multisite the plugin is network-only: **Network Activate** it (Network
-   Admin → Plugins). The `Network: true` header makes WordPress treat it as
-   network-only, so activating it (admin UI or WP-CLI) always lands network-wide,
-   never on a single site; an activation-hook guard is a header-independent
-   backstop. For a true network-wide guarantee, also **network-activate Two
-   Factor**; the Network Admin notice warns you when it isn't.
+   Admin → Plugins). A per-site activation is refused — an activation-hook guard
+   rolls it back with a "must be Network Activated" notice, covering the admin UI
+   and WP-CLI / programmatic paths. For a true network-wide guarantee, also
+   **network-activate Two Factor**; the Network Admin notice warns you when it isn't.
 3. Optional "cannot be deactivated" mode: WordPress only auto-loads flat PHP
    files in `wp-content/mu-plugins/` (it does not descend into subdirectories), so
    keep the full plugin folder in `wp-content/plugins/force-email-two-factor/` and
@@ -167,19 +166,22 @@ challenge.
 == Changelog ==
 
 = 1.9.0 =
-* Multisite: the plugin is now **network-only**. The `Network: true` header makes
-  WordPress treat it as network-only, so activating it (admin UI or WP-CLI) always
-  lands network-wide, never per-site; an activation-hook guard is a
-  header-independent backstop. This stops enforcement being left with per-site
-  gaps a network-global user could slip through.
+* Multisite: the plugin is now **network-only**. A per-site activation is refused
+  by an activation-hook guard (rolled back with a "must be Network Activated"
+  notice, covering the admin UI and WP-CLI / programmatic paths), so enforcement
+  can't be left with per-site gaps a network-global user could slip through.
+  (A "Network: true" header is intentionally avoided — it would make core silently
+  promote a per-site activation to network-wide instead of refusing it.)
 * Add a **Network Admin notice**: when the plugin is network-active but Two Factor
   is not network-active, it warns that 2FA is not enforced network-wide and offers
   a one-click install + network-activate of Two Factor.
 * Add a per-site **heads-up notice** on multisite: on any site where Two Factor is
   not loaded, site admins see that enforcement is off there and to contact the
   network admin (non-actionable — the fix lives in Network Admin).
-* The one-click installer now network-activates Two Factor when this plugin is
-  network-active, and uses the `manage_network_plugins` capability.
+* The one-click installer network-activates Two Factor when this plugin runs
+  network-wide — including when it is loaded via the mu-loader (which now also
+  triggers the Network Admin notice) — and checks `install_plugins` (to install)
+  and `manage_network_plugins` (to network-activate) independently.
 * Add a migration notice for installs that were activated per-site before 1.9.0:
   the activation guard only blocks NEW per-site activations, so a super admin is
   nudged to Network Activate an existing per-site install.

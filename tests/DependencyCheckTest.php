@@ -32,15 +32,6 @@ final class DependencyCheckTest extends TestCase {
 		$this->assertFalse( force_2fa_should_nag( true, false ) );
 	}
 
-	public function test_required_cap_is_install_when_plugin_absent(): void {
-		$this->assertSame( 'install_plugins', force_2fa_required_install_cap( false ) );
-	}
-
-	public function test_required_cap_is_activate_when_already_installed(): void {
-		// Already on disk → only activation is needed, which is a lower bar.
-		$this->assertSame( 'activate_plugins', force_2fa_required_install_cap( true ) );
-	}
-
 	public function test_register_hooks_wires_the_admin_dependency_hooks(): void {
 		$GLOBALS['__force2fa_added_actions'] = array();
 		force_2fa_register_hooks();
@@ -89,19 +80,46 @@ final class DependencyCheckTest extends TestCase {
 		$this->assertFalse( force_2fa_should_nag_network( true, false, false ) );
 	}
 
-	public function test_required_cap_is_network_when_network_and_absent(): void {
-		$this->assertSame( 'manage_network_plugins', force_2fa_required_install_cap( false, true ) );
+	public function test_install_caps_network_missing_needs_install_and_network(): void {
+		// Installing still requires install_plugins even when a setup grants network
+		// plugin management but withholds it.
+		$this->assertSame(
+			array( 'install_plugins', 'manage_network_plugins' ),
+			force_2fa_required_install_caps( false, true )
+		);
 	}
 
-	public function test_required_cap_is_network_when_network_and_installed(): void {
-		// Network-wide activation needs the network cap regardless of on-disk state.
-		$this->assertSame( 'manage_network_plugins', force_2fa_required_install_cap( true, true ) );
+	public function test_install_caps_network_present_needs_network_only(): void {
+		// Already on disk → only network activation is needed.
+		$this->assertSame( array( 'manage_network_plugins' ), force_2fa_required_install_caps( true, true ) );
 	}
 
-	public function test_required_cap_defaults_to_single_site_without_network_flag(): void {
-		// Backwards-compatible: the network flag defaults off.
-		$this->assertSame( 'install_plugins', force_2fa_required_install_cap( false ) );
-		$this->assertSame( 'activate_plugins', force_2fa_required_install_cap( true ) );
+	public function test_install_caps_single_site_missing_needs_install_and_activate(): void {
+		$this->assertSame(
+			array( 'install_plugins', 'activate_plugins' ),
+			force_2fa_required_install_caps( false )
+		);
+	}
+
+	public function test_install_caps_single_site_present_needs_activate(): void {
+		$this->assertSame( array( 'activate_plugins' ), force_2fa_required_install_caps( true ) );
+	}
+
+	public function test_effectively_network_wide_when_formally_network_active(): void {
+		$this->assertTrue( force_2fa_is_effectively_network_wide( true, true, false ) );
+	}
+
+	public function test_effectively_network_wide_when_mu_loaded(): void {
+		// Multisite, not network-active, not per-site → mu-loaded → treat network-wide.
+		$this->assertTrue( force_2fa_is_effectively_network_wide( true, false, false ) );
+	}
+
+	public function test_not_network_wide_when_per_site_active(): void {
+		$this->assertFalse( force_2fa_is_effectively_network_wide( true, false, true ) );
+	}
+
+	public function test_not_network_wide_on_single_site(): void {
+		$this->assertFalse( force_2fa_is_effectively_network_wide( false, false, false ) );
 	}
 
 	public function test_activation_blocked_for_per_site_activation_on_multisite(): void {

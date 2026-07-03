@@ -7,10 +7,10 @@
 # because unpacking the core tarball exceeds the stock 128M on some setups.
 #
 # Asserts, on a real multisite:
-#   - a normal `wp plugin activate` lands the plugin NETWORK-wide, never per-site
-#     (the `Network: true` header; core's activate_plugin() enforces it), and
+#   - a per-site `wp plugin activate` is REFUSED (the register_activation_hook
+#     guard rolls it back), while `--network` succeeds, and
 #   - with Two Factor absent the plugin loads and safely no-ops, and
-#   - the per-site activation guard's decision logic is wired.
+#   - the plugin ends up network-active and never per-site.
 #
 # Usage: bin/multisite-e2e.sh
 set -euo pipefail
@@ -45,8 +45,14 @@ echo "==> Install the plugin under test (copied — a symlink breaks plugin_base
 mkdir -p "$WP/wp-content/plugins/force-email-two-factor"
 cp "$PLUGIN_DIR/force-email-two-factor.php" "$WP/wp-content/plugins/force-email-two-factor/"
 
-echo "==> Activate normally (must land network-wide, never per-site) — Two Factor absent"
-wp plugin activate force-email-two-factor
+echo "==> Per-site activation must be REFUSED (network-only guard)"
+if wp plugin activate force-email-two-factor >/dev/null 2>&1; then
+  echo "FAIL: per-site activation was allowed"; exit 1
+fi
+echo "    refused, as expected"
+
+echo "==> Network activation must succeed — Two Factor absent"
+wp plugin activate force-email-two-factor --network
 
 echo "==> Assert network-only behavior"
 wp eval '

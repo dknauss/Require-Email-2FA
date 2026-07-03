@@ -6,7 +6,6 @@
  * Author:           Pixel
  * Author URI:       https://wearepixel.ca
  * Version:          1.9.0
- * Network:          true
  * Requires PHP:     7.2
  * License:          GPL-2.0-or-later
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
@@ -28,15 +27,15 @@
  * ---------------------------------------------------------------------------
  * Install the folder at wp-content/plugins/force-email-two-factor/ and activate
  * it like any plugin. On MULTISITE it is network-only: it must be Network
- * Activated (Network Admin → Plugins) and per-site activation is blocked. This is
+ * Activated (Network Admin → Plugins) and per-site activation is refused. This is
  * deliberate — enforcement keys off whether the plugin (and Two Factor) is active
  * in the current request's site context, so a per-site install would leave gaps a
- * network-global user could slip through. The "Network: true" header makes core
- * treat this as a network-only plugin, so activate_plugin() promotes ANY
- * activation (admin UI or WP-CLI) to network-wide instead of per-site — that is
- * the primary enforcement. force_2fa_block_single_site_activation() (a
- * register_activation_hook guard) is a header-independent backstop that refuses a
- * per-site activation if one is ever reached (e.g. the header is removed).
+ * network-global user could slip through. force_2fa_block_single_site_activation()
+ * (a register_activation_hook guard) rolls back and refuses any per-site activation
+ * with a "must be Network Activated" notice, covering the admin UI and WP-CLI /
+ * programmatic paths alike. (A "Network: true" header is intentionally avoided: it
+ * would make core silently promote a per-site activation to network-wide rather
+ * than refuse it — see force_2fa_block_single_site_activation().)
  *
  * For a true network-wide guarantee Two Factor must ALSO be network-active; if it
  * is only site-active (or absent) on some sites, enforcement silently no-ops
@@ -143,23 +142,43 @@ function force_2fa_should_nag_network( $self_network_active, $dependency_met_net
 }
 
 /**
- * The capability required to satisfy the dependency from the admin notice.
+ * The capabilities required to satisfy the dependency from the admin notice.
  *
- * On the network path, resolving the dependency means installing and/or
- * network-activating Two Factor, which requires manage_network_plugins (a super
- * admin, who also holds install_plugins). On the single-site path, an on-disk but
- * inactive plugin only needs activate_plugins; a missing one needs install_plugins.
+ * Returns EVERY capability the action needs, so they are checked independently
+ * (setups can grant network plugin management while withholding install_plugins):
+ *   - installing a missing plugin always requires install_plugins;
+ *   - network activation requires manage_network_plugins;
+ *   - single-site activation requires activate_plugins.
  * Split out so the authorization rule is unit-tested independently of the glue.
  *
  * @param bool $already_installed Whether two-factor/two-factor.php exists on disk.
  * @param bool $network           Whether this is the network-wide (multisite) path.
- * @return string The required capability slug.
+ * @return string[] All required capability slugs.
  */
-function force_2fa_required_install_cap( $already_installed, $network = false ) {
-	if ( $network ) {
-		return 'manage_network_plugins';
+function force_2fa_required_install_caps( $already_installed, $network = false ) {
+	$caps = array();
+	if ( ! $already_installed ) {
+		$caps[] = 'install_plugins';
 	}
-	return $already_installed ? 'activate_plugins' : 'install_plugins';
+	$caps[] = $network ? 'manage_network_plugins' : 'activate_plugins';
+	return $caps;
+}
+
+/**
+ * Whether this plugin runs network-wide on multisite.
+ *
+ * True when it is formally network-active OR mu-loaded — an mu-loader install runs
+ * on every site but appears in neither the site nor the network active-plugins
+ * list, so it is effectively network-wide and must get the Network Admin notice.
+ * A per-site activation is NOT network-wide. Pure decision, unit-tested.
+ *
+ * @param bool $is_multisite    Whether this is a multisite network.
+ * @param bool $network_active  Whether it is in the network active-plugins list.
+ * @param bool $per_site_active Whether it is in the current site's active-plugins list.
+ * @return bool
+ */
+function force_2fa_is_effectively_network_wide( $is_multisite, $network_active, $per_site_active ) {
+	return (bool) $is_multisite && ( (bool) $network_active || ! (bool) $per_site_active );
 }
 
 /**
@@ -530,15 +549,23 @@ function force_2fa_dependency_notice() {
 }
 
 /**
- * Whether Require Email 2FA is itself network-active (multisite only).
+ * Whether Require Email 2FA runs network-wide (multisite): network-active or mu-loaded.
  *
  * @return bool
  */
 function force_2fa_self_network_active() {
+	if ( ! is_multisite() ) {
+		return false;
+	}
 	if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 	}
-	return is_multisite() && is_plugin_active_for_network( plugin_basename( __FILE__ ) );
+	$self = plugin_basename( __FILE__ );
+	return force_2fa_is_effectively_network_wide(
+		true,
+		is_plugin_active_for_network( $self ),
+		in_array( $self, (array) get_option( 'active_plugins', array() ), true )
+	);
 }
 
 /**
@@ -587,15 +614,20 @@ function force_2fa_network_dependency_notice() {
 }
 
 /**
- * Backstop that blocks per-site activation on multisite (this plugin is network-only).
+ * Refuse per-site activation on multisite (this plugin is network-only).
  *
- * Registered via register_activation_hook(); receives $network_wide. Primary
- * enforcement is the "Network: true" header — WordPress's activate_plugin()
- * promotes a network-only plugin to network-wide (via is_network_only_plugin()),
- * so a per-site activation normally never reaches this hook. This is the
- * header-independent safety net: it fires only if some path reaches activation
- * with a per-site scope (e.g. the header is ever removed), rolling the activation
- * back and explaining, so enforcement can't be left with per-site gaps.
+ * Registered via register_activation_hook(); receives $network_wide. On multisite
+ * a per-site activation ($network_wide false) is rolled back and refused with a
+ * notice, so the plugin can only ever run network-wide and enforcement can't be
+ * left with per-site gaps a network-global user could slip through. Network
+ * activation ($network_wide true) passes through. This is the PRIMARY enforcement
+ * and also catches WP-CLI / programmatic per-site activation.
+ *
+ * NOTE: a "Network: true" header is deliberately NOT used. Core silently PROMOTES
+ * a per-site activation of a network-only plugin to network-wide before this hook
+ * runs, so the header would never refuse a per-site attempt — it would roll 2FA
+ * out network-wide unexpectedly instead. Explicit rejection here is what makes the
+ * "must be Network Activated" behavior actually happen.
  *
  * @param bool $network_wide Whether the activation is network-wide.
  */
@@ -675,8 +707,10 @@ function force_2fa_handle_install_two_factor() {
 	// resolve the dependency network-wide too (install + network-activate).
 	$network = force_2fa_self_network_active();
 
-	if ( ! current_user_can( force_2fa_required_install_cap( $installed, $network ) ) ) {
-		wp_die( esc_html__( 'You do not have permission to install or activate plugins.', 'force-email-two-factor' ) );
+	foreach ( force_2fa_required_install_caps( $installed, $network ) as $required_cap ) {
+		if ( ! current_user_can( $required_cap ) ) {
+			wp_die( esc_html__( 'You do not have permission to install or activate plugins.', 'force-email-two-factor' ) );
+		}
 	}
 
 	require_once ABSPATH . 'wp-admin/includes/file.php';
