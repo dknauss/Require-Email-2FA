@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.8.1
+Stable tag: 1.9.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -16,8 +16,8 @@ Builds on the [Two Factor](https://wordpress.org/plugins/two-factor/) plugin and
 makes its emailed 2FA codes a mandatory baseline for every user — so the login
 challenge appears even for accounts that never set up two-factor. Two Factor must
 be active for any enforcement to happen; if it is not, this plugin activates but
-stays a no-op and shows an admin notice with a one-click installer. Install
-network-wide or per-site on multisite.
+stays a no-op and shows an admin notice with a one-click installer. On multisite
+it is network-only: Network Activate it (per-site activation is blocked).
 
 It does two things:
 
@@ -61,11 +61,11 @@ It does two things:
 
 1. Install the plugin folder at
    `wp-content/plugins/force-email-two-factor/` and activate it.
-2. On multisite, choose an activation mode:
-   * Network Activate to enforce across all sites (recommended baseline).
-   * Activate per-site to enforce only on that site. Note: enforcement keys off
-     the login entry point, not the (network-global) user, so per-site is not a
-     network-wide guarantee.
+2. On multisite the plugin is network-only: **Network Activate** it (Network
+   Admin → Plugins). A per-site activation is refused — an activation-hook guard
+   rolls it back with a "must be Network Activated" notice, covering the admin UI
+   and WP-CLI / programmatic paths. For a true network-wide guarantee, also
+   **network-activate Two Factor**; the Network Admin notice warns you when it isn't.
 3. Optional "cannot be deactivated" mode: WordPress only auto-loads flat PHP
    files in `wp-content/mu-plugins/` (it does not descend into subdirectories), so
    keep the full plugin folder in `wp-content/plugins/force-email-two-factor/` and
@@ -136,12 +136,16 @@ add_filter( 'force_2fa_api_login_allowlist', function () {
 } );
 `
 
-= Should I network-activate or activate per-site on multisite? =
+= How does it work on multisite? =
 
-Network Activate for a true network-wide guarantee. Per-site activation only
-enforces when the plugin is active in the site you log in through, and users are
-network-global, so a user could log in via a site where it is inactive and skip
-enforcement. For an un-deactivatable install, use the bundled `mu-loader.php`.
+It is network-only: you must Network Activate it, and per-site activation is
+blocked. This is deliberate — users are network-global, so a per-site install
+would let someone log in via a site where the plugin is inactive and skip
+enforcement. Network activation closes that gap. Note that a true network-wide
+guarantee also requires the Two Factor plugin to be network-active; if it is only
+site-active (or absent) somewhere, enforcement silently no-ops there, and the
+Network Admin notice will tell you. For an un-deactivatable install, use the
+bundled `mu-loader.php`.
 
 = Does this remove a user's authenticator app or hardware key? =
 
@@ -153,12 +157,38 @@ configured stays in place and remains their primary method.
 Mail delivery is part of the security boundary; if outbound email fails, users
 without a stronger factor can be locked out until mail is fixed or
 `FORCE_2FA_DISABLE` is enabled. This plugin only enforces the Two Factor plugin
-and does not integrate with other 2FA plugins. Per-site multisite activation is
-not a network-wide guarantee; use Network Activate or the optional mu-loader for
-that. API bypasses are intentionally narrow: only allowlisted accounts using
-Application Passwords can skip the interactive challenge.
+and does not integrate with other 2FA plugins. On multisite it is network-only
+(per-site activation is blocked); a true network-wide guarantee also depends on
+Two Factor itself being network-active. API bypasses are intentionally narrow:
+only allowlisted accounts using Application Passwords can skip the interactive
+challenge.
 
 == Changelog ==
+
+= 1.9.0 =
+* Multisite: the plugin is now **network-only**. A per-site activation is refused
+  by an activation-hook guard (rolled back with a "must be Network Activated"
+  notice, covering the admin UI and WP-CLI / programmatic paths), so enforcement
+  can't be left with per-site gaps a network-global user could slip through.
+  (A "Network: true" header is intentionally avoided — it would make core silently
+  promote a per-site activation to network-wide instead of refusing it.)
+* Add a **Network Admin notice**: when the plugin is network-active but Two Factor
+  is not network-active, it warns that 2FA is not enforced network-wide and offers
+  a one-click install + network-activate of Two Factor.
+* Add a per-site **heads-up notice** on multisite: on any site where Two Factor is
+  not loaded, site admins see that enforcement is off there and to contact the
+  network admin (non-actionable — the fix lives in Network Admin).
+* The one-click installer network-activates Two Factor when this plugin runs
+  network-wide — including when it is loaded via the mu-loader (which now also
+  triggers the Network Admin notice) — and checks `install_plugins` (to install)
+  and `manage_network_plugins` (to network-activate) independently.
+* Add a migration notice for installs that were activated per-site before 1.9.0:
+  the activation guard only blocks NEW per-site activations, so a super admin is
+  nudged to Network Activate an existing per-site install.
+* Tests cover the network nag decision, the network capability rule, the per-site
+  activation block, and the legacy per-site migration warning. A real multisite
+  end-to-end check (`bin/multisite-e2e.sh`, run in CI) asserts that activation
+  lands network-wide and the plugin safely no-ops when Two Factor is absent.
 
 = 1.8.1 =
 * Plugin header: add `Plugin URI` and `Text Domain`; set the author to Pixel

@@ -33,6 +33,13 @@ function add_action( $tag = '', $cb = null, $priority = 10, $accepted_args = 1 )
 	return true;
 }
 
+// The activation guard is registered at load; the callback (which calls
+// is_multisite()/wp_die()) only runs on a real activation, never in unit tests.
+// Its pure decision is covered directly via force_2fa_activation_blocked().
+function register_activation_hook( $file, $cb ) {
+	return true;
+}
+
 /**
  * Returns a per-hook override when a test set one, otherwise passes the value
  * through unchanged (WordPress's default behaviour with no filters attached).
