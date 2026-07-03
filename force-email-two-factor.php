@@ -610,7 +610,7 @@ function force_2fa_dependency_notice() {
 				esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA yet.', 'force-email-two-factor' ),
 				esc_html__( 'It needs the Two Factor plugin to be installed and active. Until then, 2FA is not enforced for any user.', 'force-email-two-factor' ),
 				esc_url( $install_url ),
-				esc_html__( 'Install &amp; activate Two Factor', 'force-email-two-factor' ),
+				esc_html__( 'Install & activate Two Factor', 'force-email-two-factor' ),
 				esc_url( 'https://wordpress.org/plugins/two-factor/' ),
 				esc_html__( 'Learn more', 'force-email-two-factor' )
 			);
@@ -698,7 +698,7 @@ function force_2fa_network_dependency_notice() {
 			esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA network-wide.', 'force-email-two-factor' ),
 			esc_html__( 'It is network-active, but the Two Factor plugin is not — so 2FA is not enforced on sites where Two Factor is inactive. Install and network-activate Two Factor to close the gap.', 'force-email-two-factor' ),
 			esc_url( $install_url ),
-			esc_html__( 'Install &amp; network-activate Two Factor', 'force-email-two-factor' ),
+			esc_html__( 'Install & network-activate Two Factor', 'force-email-two-factor' ),
 			esc_url( 'https://wordpress.org/plugins/two-factor/' ),
 			esc_html__( 'Learn more', 'force-email-two-factor' )
 		);
