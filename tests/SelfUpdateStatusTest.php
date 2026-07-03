@@ -57,6 +57,25 @@ final class SelfUpdateStatusTest extends TestCase {
 		);
 	}
 
+	public function test_health_presentation_flags_intended_states_good(): void {
+		$this->assertSame( 'good', force_2fa_self_update_health( 'active' )['status'] );
+		$this->assertSame( 'good', force_2fa_self_update_health( 'disabled_config' )['status'] );
+	}
+
+	public function test_health_presentation_flags_unintended_states_recommended(): void {
+		foreach ( array( 'disabled_vcs', 'unavailable_no_puc', 'disabled_no_update_uri' ) as $status ) {
+			$this->assertSame( 'recommended', force_2fa_self_update_health( $status )['status'], $status );
+		}
+	}
+
+	public function test_health_presentation_does_not_label_a_disabled_site_as_receiving_updates(): void {
+		// Regression guard: a managed site (self-update off) must not report
+		// "receiving updates" — the label must state it is off.
+		$label = force_2fa_self_update_health( 'disabled_config' )['label'];
+		$this->assertStringNotContainsStringIgnoringCase( 'receiving updates', $label );
+		$this->assertStringContainsStringIgnoringCase( 'off', $label );
+	}
+
 	public function test_register_hooks_wires_the_site_health_filter(): void {
 		$GLOBALS['__force2fa_added_filters'] = array();
 		force_2fa_register_hooks();

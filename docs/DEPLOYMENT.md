@@ -95,7 +95,7 @@ self-update"** test. Expected results:
 | Site Health result | Meaning |
 |---|---|
 | *receiving updates* (good) | Mode A, working normally |
-| *self-update intentionally disabled* (good) | Mode B, as configured |
+| *self-update turned off (managed externally)* (good) | Mode B, as configured |
 | *not self-updating (working copy)* (recommended) | a `.git` is present — fine on a dev box, a problem on production Mode A |
 | *cannot self-update (updater files missing)* (recommended) | reinstall from the release zip |
 | *not self-updating (no update source)* (recommended) | the `Update URI` header is blank |

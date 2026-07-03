@@ -154,6 +154,22 @@ site-active (or absent) somewhere, enforcement silently no-ops there, and the
 Network Admin notice will tell you. For an un-deactivatable install, use the
 bundled `mu-loader.php`.
 
+= How does the plugin update, and can I turn that off? =
+
+It updates itself from its GitHub Releases (not WordPress.org) via the bundled
+Plugin Update Checker: new versions appear under **Dashboard &rarr; Updates** and
+through unattended auto-updates. On sites patched by a central manager (MainWP,
+Composer, git deploys), turn the self-updater off so each site does not poll
+GitHub:
+
+`
+define( 'FORCE_2FA_DISABLE_SELF_UPDATE', true );
+`
+
+Your management layer then delivers updates, and enforcement is unchanged. A
+**Tools &rarr; Site Health** check reports each site's update posture. See
+`docs/DEPLOYMENT.md` for the managed-vs-standalone deployment guide.
+
 = Does this remove a user's authenticator app or hardware key? =
 
 No. It appends the Email provider as a floor; any stronger factor the user

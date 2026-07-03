@@ -269,16 +269,18 @@ The plugin checks this constant at load time and registers nothing when it's set
   from the authentication → API-login-gating stages, not from priorities.)
 
 - **Self-hosted updates (no WordPress.org, no collisions):** distributed from
-  GitHub, so `force_2fa_bootstrap_self_update()` registers
+  GitHub, so `force_2fa_bootstrap_self_update()` wires up
   [Plugin Update Checker](https://github.com/YahnisElsts/plugin-update-checker)
-  on `plugins_loaded`. It reads the repository from the **`Update URI`** plugin
-  header, compares the installed `Version` against the latest GitHub **Release**,
-  and offers that release's attached `<slug>.zip` through the normal Dashboard →
-  Updates flow and unattended auto-updates.
-  [`.github/workflows/release.yml`](.github/workflows/release.yml) builds and
-  publishes that zip on every `v*` tag. Self-update is skipped in a working copy
-  under version control (a `.git` present), so a dev clone updates via `git`, not
-  by having WordPress overwrite it with a release zip.
+  (on `plugins_loaded`, and only in admin, cron, and WP-CLI requests — front-end
+  page views skip it, since updates are never checked or applied there). It reads
+  the repository from the **`Update URI`** plugin header, compares the installed
+  `Version` against the latest GitHub **Release**, and offers that release's
+  attached `<slug>.zip` through the normal Dashboard → Updates flow and unattended
+  auto-updates. [`.github/workflows/release.yml`](.github/workflows/release.yml)
+  builds and publishes that zip on every `v*` tag. Self-update is skipped when it
+  is turned off (`FORCE_2FA_DISABLE_SELF_UPDATE`; see **Fleet deployment** below) or
+  in a working copy under version control (a `.git` present), so a dev clone updates
+  via `git`, not by having WordPress overwrite it with a release zip.
 
   Two independent guards keep a same-named WordPress.org plugin from ever hijacking
   the update: WordPress core honours the non-`.org` `Update URI` and declines to

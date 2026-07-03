@@ -943,6 +943,53 @@ function force_2fa_self_update_status( $enabled, $has_vcs, $puc_readable, $has_u
 }
 
 /**
+ * Map a self-update status to its Site Health severity and label.
+ *
+ * Intended states (updating, or a deliberate opt-out) are "good"; likely-unintended
+ * ones (a working-copy .git on production, missing updater files, a blank Update
+ * URI) are "recommended". Pure decision, unit-tested — keeping the classification
+ * out of the disk-reading glue is what guards against, e.g., a disabled site being
+ * labelled "receiving updates".
+ *
+ * @param string $status A force_2fa_self_update_status() value.
+ * @return array{status:string,label:string}
+ */
+function force_2fa_self_update_health( $status ) {
+	switch ( $status ) {
+		case 'active':
+			return array(
+				'status' => 'good',
+				'label'  => __( 'Require Email 2FA is receiving updates', 'force-email-two-factor' ),
+			);
+		case 'disabled_config':
+			return array(
+				'status' => 'good',
+				'label'  => __( 'Require Email 2FA self-update is turned off (managed externally)', 'force-email-two-factor' ),
+			);
+		case 'disabled_vcs':
+			return array(
+				'status' => 'recommended',
+				'label'  => __( 'Require Email 2FA is not self-updating (working copy)', 'force-email-two-factor' ),
+			);
+		case 'unavailable_no_puc':
+			return array(
+				'status' => 'recommended',
+				'label'  => __( 'Require Email 2FA cannot self-update (updater files missing)', 'force-email-two-factor' ),
+			);
+		case 'disabled_no_update_uri':
+			return array(
+				'status' => 'recommended',
+				'label'  => __( 'Require Email 2FA is not self-updating (no update source)', 'force-email-two-factor' ),
+			);
+		default:
+			return array(
+				'status' => 'recommended',
+				'label'  => __( 'Require Email 2FA update status is unknown', 'force-email-two-factor' ),
+			);
+	}
+}
+
+/**
  * Register a Site Health test that reports the self-update posture.
  *
  * Surfaces a self-update that isn't running — an intentional opt-out, a stray .git
@@ -1089,43 +1136,27 @@ function force_2fa_site_health_self_update() {
 		is_readable( $puc_bootstrap ),
 		$has_update_uri
 	);
+	$health = force_2fa_self_update_health( $status );
 
-	$result = array(
-		'label'       => __( 'Require Email 2FA is receiving updates', 'force-email-two-factor' ),
-		'status'      => 'good',
+	$descriptions = array(
+		'active'                 => __( 'This plugin updates directly from its GitHub Releases, through the normal Dashboard &rarr; Updates flow and unattended auto-updates.', 'force-email-two-factor' ),
+		'disabled_config'        => __( 'Self-update is intentionally disabled (FORCE_2FA_DISABLE_SELF_UPDATE). Updates are expected to be delivered by your plugin management layer, e.g. MainWP, Composer, or git deploys.', 'force-email-two-factor' ),
+		'disabled_vcs'           => __( 'A .git directory is present, so WordPress will not replace this working copy with a release. On a production site, install the release zip instead; if this is intentional, update it via git or your management layer.', 'force-email-two-factor' ),
+		'unavailable_no_puc'     => __( 'The bundled updater files are missing, so this plugin cannot check for updates. Reinstall it from the official release zip.', 'force-email-two-factor' ),
+		'disabled_no_update_uri' => __( 'The Update URI header is empty, so no update source is configured. Point it at the source repository to receive updates.', 'force-email-two-factor' ),
+	);
+	$description  = isset( $descriptions[ $status ] ) ? $descriptions[ $status ] : '';
+
+	return array(
+		'label'       => $health['label'],
+		'status'      => $health['status'],
 		'badge'       => array(
 			'label' => __( 'Security', 'force-email-two-factor' ),
 			'color' => 'blue',
 		),
-		'description' => '',
+		'description' => '' === $description ? '' : '<p>' . esc_html( $description ) . '</p>',
 		'test'        => 'force_2fa_self_update',
 	);
-
-	switch ( $status ) {
-		case 'active':
-			$result['description'] = '<p>' . esc_html__( 'This plugin updates directly from its GitHub Releases, through the normal Dashboard &rarr; Updates flow and unattended auto-updates.', 'force-email-two-factor' ) . '</p>';
-			break;
-		case 'disabled_config':
-			$result['description'] = '<p>' . esc_html__( 'Self-update is intentionally disabled (FORCE_2FA_DISABLE_SELF_UPDATE). Updates are expected to be delivered by your plugin management layer, e.g. MainWP, Composer, or git deploys.', 'force-email-two-factor' ) . '</p>';
-			break;
-		case 'disabled_vcs':
-			$result['status']      = 'recommended';
-			$result['label']       = __( 'Require Email 2FA is not self-updating (working copy)', 'force-email-two-factor' );
-			$result['description'] = '<p>' . esc_html__( 'A .git directory is present, so WordPress will not replace this working copy with a release. On a production site, install the release zip instead; if this is intentional, update it via git or your management layer.', 'force-email-two-factor' ) . '</p>';
-			break;
-		case 'unavailable_no_puc':
-			$result['status']      = 'recommended';
-			$result['label']       = __( 'Require Email 2FA cannot self-update (updater files missing)', 'force-email-two-factor' );
-			$result['description'] = '<p>' . esc_html__( 'The bundled updater files are missing, so this plugin cannot check for updates. Reinstall it from the official release zip.', 'force-email-two-factor' ) . '</p>';
-			break;
-		case 'disabled_no_update_uri':
-			$result['status']      = 'recommended';
-			$result['label']       = __( 'Require Email 2FA is not self-updating (no update source)', 'force-email-two-factor' );
-			$result['description'] = '<p>' . esc_html__( 'The Update URI header is empty, so no update source is configured. Point it at the source repository to receive updates.', 'force-email-two-factor' ) . '</p>';
-			break;
-	}
-
-	return $result;
 	// @codeCoverageIgnoreEnd
 }
 
