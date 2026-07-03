@@ -785,11 +785,12 @@ function force_2fa_handle_install_two_factor() {
  *   - the slug and the download asset name derive from the installed plugin folder,
  *     which the release workflow builds under the same name — nothing is hardcoded.
  *
- * PUC is a Composer dependency, bundled under vendor/ in the release zip built by
- * .github/workflows/release.yml but absent from a bare git checkout. When it is
- * missing (running from source, or the Playground CI mount) this is a deliberate
- * no-op: the plugin does not self-update, which is correct for a working copy that
- * is updated via git.
+ * PUC is vendored — committed under vendor/yahnis-elsts/ (a Composer dependency,
+ * managed with `composer update` but tracked in git via a .gitignore exception) so
+ * the exact bytes that auto-update installed sites are reviewed in-repo rather than
+ * resolved from Packagist at release time. Because it is therefore also present in
+ * a git checkout, the .git guard below keeps self-update from clobbering a working
+ * copy; real installs (release zip, no .git) self-update normally.
  *
  * Registered on plugins_loaded rather than at file load so the zero-dependency
  * unit-test bootstrap — which records add_action() without ever firing it — never
@@ -797,6 +798,15 @@ function force_2fa_handle_install_two_factor() {
  */
 function force_2fa_bootstrap_self_update() {
 	// @codeCoverageIgnoreStart
+	// Never self-update a working copy under version control. Plugin Update Checker
+	// is vendored (committed), so it is present in a git clone too — but a clone (or
+	// a git worktree, where .git is a file) is updated with `git pull`, and letting
+	// WordPress replace it with a release zip would clobber the checkout. A release
+	// build carries no .git, so real installs are unaffected.
+	if ( file_exists( __DIR__ . '/.git' ) ) {
+		return;
+	}
+
 	$puc_bootstrap = __DIR__ . '/vendor/yahnis-elsts/plugin-update-checker/plugin-update-checker.php';
 	if ( ! is_readable( $puc_bootstrap ) ) {
 		return;

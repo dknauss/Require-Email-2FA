@@ -1,4 +1,9 @@
-/vendor/
+# Ignore all Composer dependencies EXCEPT the vendored runtime updater (Plugin
+# Update Checker). It is committed on purpose so the exact bytes that auto-update
+# installed sites are reviewed and pinned in-repo, not resolved fresh from
+# Packagist at release time (the release pipeline is this plugin's trust boundary).
+/vendor/*
+!/vendor/yahnis-elsts/
 /.phpunit.cache/
 .phpunit.result.cache
 composer.phar

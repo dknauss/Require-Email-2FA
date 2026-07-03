@@ -2,13 +2,21 @@ name: Release
 
 # Build the distributable plugin zip and publish it as a GitHub Release asset on
 # every version tag (v1.2.3). The zip is what Plugin Update Checker downloads for
-# in-place / auto-updates on installed sites, so it must contain the plugin plus
-# its production Composer dependencies (vendor/, which is git-ignored).
+# in-place / auto-updates on installed sites.
+#
+# The sole runtime dependency (Plugin Update Checker) is committed under vendor/,
+# so the build is just `git archive` — no Composer, no dependency resolution at
+# release time. The published bytes are therefore identical to what is reviewed in
+# the repo, and Packagist is not in the release-time trust path. (This pipeline is
+# the plugin's trust boundary: its output auto-installs on every site.)
 #
 # Fork knob: PLUGIN_SLUG is the plugin's folder/main-file/zip name. A fork that
 # renames the plugin changes it here; the runtime updater derives the same value
-# from the installed folder, so the two stay in sync. Everything else is
-# repo-relative (GITHUB_REF_NAME, GITHUB_TOKEN, gh) and needs no per-fork edits.
+# from the installed folder, so the two stay in sync.
+#
+# Actions are pinned to a full commit SHA (Dependabot bumps them, keeping the
+# version in the trailing comment) so a moved tag cannot inject code into a job
+# that holds a contents:write token.
 
 on:
   push:
@@ -29,13 +37,7 @@ jobs:
     env:
       PLUGIN_SLUG: force-email-two-factor
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          coverage: none
-          tools: composer:v2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Verify tag matches the plugin Version header
         run: |
@@ -48,22 +50,17 @@ jobs:
             exit 1
           fi
 
-      - name: Install production dependencies
-        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
-
-      - name: Assemble plugin directory
+      - name: Build plugin zip
         run: |
-          mkdir -p "build/${PLUGIN_SLUG}"
-          # git archive honours .gitattributes export-ignore, so tests/, .github/,
-          # composer.* and other dev-only files are stripped from the payload.
-          git archive HEAD | tar -x -C "build/${PLUGIN_SLUG}"
-          # Add production Composer deps (PUC), which are not tracked in git.
-          cp -R vendor "build/${PLUGIN_SLUG}/vendor"
-
-      - name: Create zip
-        run: |
-          ( cd build && zip -qr "../${PLUGIN_SLUG}.zip" "${PLUGIN_SLUG}" )
+          # git archive honours .gitattributes export-ignore (strips tests/,
+          # .github/, composer.* etc.) and includes the committed vendored updater
+          # under vendor/yahnis-elsts/. No Composer step is needed.
+          git archive --format=zip --prefix="${PLUGIN_SLUG}/" -o "${PLUGIN_SLUG}.zip" HEAD
+          echo "Zip contents (tail):"
           unzip -l "${PLUGIN_SLUG}.zip" | tail -n 20
+          # Fail loudly if the updater did not make it into the payload.
+          unzip -l "${PLUGIN_SLUG}.zip" | grep -q "vendor/yahnis-elsts/plugin-update-checker/plugin-update-checker.php" \
+            || { echo "::error::Plugin Update Checker missing from zip"; exit 1; }
 
       - name: Publish GitHub Release
         env:
