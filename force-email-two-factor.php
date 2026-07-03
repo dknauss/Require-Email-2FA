@@ -65,6 +65,15 @@
  * Everything else (slug, download asset) derives from the plugin folder name; only
  * a rename also needs the release workflow's PLUGIN_SLUG updated to match.
  *
+ * TO DISABLE self-update (e.g. sites patched by a central manager such as MainWP,
+ * Composer, or git deploys) add to wp-config.php:
+ *
+ *     define( 'FORCE_2FA_DISABLE_SELF_UPDATE', true );
+ *
+ * The plugin then never polls GitHub or self-installs; your pipeline delivers
+ * updates. Enforcement is unchanged. See docs/DEPLOYMENT.md for the managed vs.
+ * standalone deployment guide.
+ *
  * ---------------------------------------------------------------------------
  * EMERGENCY KILL SWITCH
  * ---------------------------------------------------------------------------
@@ -876,6 +885,64 @@ function force_2fa_update_checker( $checker = null ) {
 }
 
 /**
+ * Whether this plugin's self-updater should run.
+ *
+ * Defaults to enabled. Turn it OFF on sites whose plugin updates are delivered by a
+ * central management layer (MainWP, Composer, git-based deploys) so each site does
+ * not independently poll GitHub and self-install releases — updates then flow only
+ * through your controlled pipeline. In wp-config.php:
+ *
+ *     define( 'FORCE_2FA_DISABLE_SELF_UPDATE', true );
+ *
+ * or via the 'force_2fa_self_update_enabled' filter (also how tests inject it).
+ * Disabling self-update does NOT weaken 2FA enforcement — every enforcement guard
+ * is independent of the updater; it only changes how this plugin's own code updates.
+ *
+ * @return bool
+ */
+function force_2fa_self_update_enabled() {
+	$enabled = ! ( defined( 'FORCE_2FA_DISABLE_SELF_UPDATE' ) && FORCE_2FA_DISABLE_SELF_UPDATE );
+
+	/**
+	 * Filter whether the self-updater runs.
+	 *
+	 * @param bool $enabled Whether self-update is enabled (default true, unless the
+	 *                      FORCE_2FA_DISABLE_SELF_UPDATE constant is truthy).
+	 */
+	return (bool) apply_filters( 'force_2fa_self_update_enabled', $enabled );
+}
+
+/**
+ * Classify the self-update posture, for diagnostics (the Site Health check).
+ *
+ * Mirrors the order of the guards in force_2fa_bootstrap_self_update() so the
+ * reported reason matches why the updater actually did or didn't wire up. Pure
+ * decision, unit-tested; force_2fa_site_health_self_update() supplies the inputs.
+ *
+ * @param bool $enabled        Result of force_2fa_self_update_enabled().
+ * @param bool $has_vcs        Whether a .git entry is present (a working copy).
+ * @param bool $puc_readable   Whether the vendored Plugin Update Checker is readable.
+ * @param bool $has_update_uri Whether the Update URI header is non-empty.
+ * @return string One of: active, disabled_config, disabled_vcs, unavailable_no_puc,
+ *                disabled_no_update_uri.
+ */
+function force_2fa_self_update_status( $enabled, $has_vcs, $puc_readable, $has_update_uri ) {
+	if ( ! $enabled ) {
+		return 'disabled_config';
+	}
+	if ( $has_vcs ) {
+		return 'disabled_vcs';
+	}
+	if ( ! $puc_readable ) {
+		return 'unavailable_no_puc';
+	}
+	if ( ! $has_update_uri ) {
+		return 'disabled_no_update_uri';
+	}
+	return 'active';
+}
+
+/**
  * Wire self-hosted plugin updates from the GitHub repository named in Update URI.
  *
  * WordPress core only checks WordPress.org for plugin updates; this plugin ships
@@ -918,6 +985,12 @@ function force_2fa_bootstrap_self_update() {
 	// site_transient_update_plugins — all of which fire in these contexts — so both
 	// manual and automatic updates are unaffected.
 	if ( ! is_admin() && ! wp_doing_cron() && ! ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+		return;
+	}
+
+	// Explicit opt-out for centrally-managed fleets (MainWP, Composer, git deploys):
+	// leave patching to the management layer instead of each site polling GitHub.
+	if ( ! force_2fa_self_update_enabled() ) {
 		return;
 	}
 

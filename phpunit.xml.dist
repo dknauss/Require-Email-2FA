@@ -18,6 +18,7 @@
             <file>tests/DependencyCheckTest.php</file>
             <file>tests/UpdateCheckerAccessorTest.php</file>
             <file>tests/AppPasswordBindingTest.php</file>
+            <file>tests/SelfUpdateStatusTest.php</file>
         </testsuite>
         <testsuite name="integration">
             <file>tests/IntegrationTest.php</file>
