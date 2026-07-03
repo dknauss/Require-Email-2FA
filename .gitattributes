@@ -13,3 +13,11 @@ CONTRIBUTING.md export-ignore
 CODE_OF_CONDUCT.md export-ignore
 SECURITY.md export-ignore
 SUPPORT.md export-ignore
+
+# Trim the vendored updater to what runs in production. Its own translations,
+# readme, and Debug Bar assets are not needed in the shipped plugin. (All PHP is
+# kept — the Debug Bar *classes* are loaded on demand by PUC's autoloader.)
+vendor/yahnis-elsts/plugin-update-checker/languages/ export-ignore
+vendor/yahnis-elsts/plugin-update-checker/css/ export-ignore
+vendor/yahnis-elsts/plugin-update-checker/js/ export-ignore
+vendor/yahnis-elsts/plugin-update-checker/README.md export-ignore
