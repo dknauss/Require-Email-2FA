@@ -903,6 +903,22 @@ function force_2fa_handle_install_two_factor() {
 		if ( is_wp_error( $result ) ) {
 			wp_die( esc_html( $result->get_error_message() ) );
 		}
+		if ( true !== $result ) {
+			wp_die( esc_html__( 'Two Factor could not be installed.', 'force-email-two-factor' ) );
+		}
+
+		// Activate the exact plugin file the upgrader just installed. This avoids
+		// validating a stale/hard-coded plugin path if the install destination differs
+		// or WordPress has a cached plugin inventory from earlier in the request.
+		wp_clean_plugins_cache( true );
+		clearstatcache();
+
+		$installed_plugin_file = $upgrader->plugin_info();
+		if ( ! is_string( $installed_plugin_file ) || '' === $installed_plugin_file ) {
+			wp_die( esc_html__( 'Two Factor was installed, but WordPress could not identify its main plugin file.', 'force-email-two-factor' ) );
+		}
+
+		$plugin_file = $installed_plugin_file;
 	}
 
 	$activated = activate_plugin( $plugin_file, '', $network );
