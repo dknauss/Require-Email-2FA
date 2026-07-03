@@ -412,6 +412,8 @@ composer phpcbf                     # auto-fix coding-standards issues
 composer check                      # phpcs + tests
 vendor/bin/phpunit --testsuite integration   # one suite
 vendor/bin/phpunit --coverage-text  # coverage (needs Xdebug or PCOV)
+bash bin/multisite-e2e.sh           # disposable real multisite, network-only guard
+bash bin/update-e2e.sh              # disposable real site, GitHub Release update path
 ```
 
 Coding standards are **WordPress-Extra** (style + security sniffs) plus
@@ -429,6 +431,11 @@ request:
 - **Playground integration** — boots a real WordPress + the real Two Factor
   plugin headlessly and asserts enforcement end-to-end (see
   [`playground/ci-blueprint.json`](playground/ci-blueprint.json))
+- **Multisite E2E** — boots a disposable SQLite-backed multisite and asserts
+  per-site activation is refused while network activation succeeds.
+- **Update E2E** — boots a disposable SQLite-backed site, copies this working tree
+  as an older installed plugin, forces an update check, and asserts WordPress
+  updates it from the latest GitHub Release `force-email-two-factor.zip` asset.
 
 The config constants (`FORCE_2FA_EXCLUDED_ROLES`, `FORCE_2FA_API_LOGIN_ALLOWLIST`)
 are read through filter accessors (`force_2fa_excluded_roles`,
