@@ -42,4 +42,32 @@ final class SelfUpdateStatusTest extends TestCase {
 	public function test_status_disabled_when_update_uri_absent(): void {
 		$this->assertSame( 'disabled_no_update_uri', force_2fa_self_update_status( true, false, true, false ) );
 	}
+
+	public function test_site_health_test_is_registered_in_the_tests_array(): void {
+		$tests = array(
+			'direct' => array(),
+			'async'  => array(),
+		);
+		$out = force_2fa_register_site_health( $tests );
+
+		$this->assertArrayHasKey( 'force_2fa_self_update', $out['direct'] );
+		$this->assertSame(
+			'force_2fa_site_health_self_update',
+			$out['direct']['force_2fa_self_update']['test']
+		);
+	}
+
+	public function test_register_hooks_wires_the_site_health_filter(): void {
+		$GLOBALS['__force2fa_added_filters'] = array();
+		force_2fa_register_hooks();
+
+		$tags = array_map(
+			static function ( $registration ) {
+				return $registration[0];
+			},
+			$GLOBALS['__force2fa_added_filters']
+		);
+
+		$this->assertContains( 'site_status_tests', $tags );
+	}
 }

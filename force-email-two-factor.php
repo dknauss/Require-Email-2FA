@@ -943,6 +943,25 @@ function force_2fa_self_update_status( $enabled, $has_vcs, $puc_readable, $has_u
 }
 
 /**
+ * Register a Site Health test that reports the self-update posture.
+ *
+ * Surfaces a self-update that isn't running — an intentional opt-out, a stray .git
+ * in a production install, a missing Update URI, or absent updater files — under
+ * Tools → Site Health, where an admin can find it, instead of a nagging admin
+ * notice on every page. Pure array transform, unit-tested.
+ *
+ * @param array $tests Site Health tests, keyed by 'direct' and 'async'.
+ * @return array
+ */
+function force_2fa_register_site_health( $tests ) {
+	$tests['direct']['force_2fa_self_update'] = array(
+		'label' => __( 'Require Email 2FA self-update', 'force-email-two-factor' ),
+		'test'  => 'force_2fa_site_health_self_update',
+	);
+	return $tests;
+}
+
+/**
  * Wire self-hosted plugin updates from the GitHub repository named in Update URI.
  *
  * WordPress core only checks WordPress.org for plugin updates; this plugin ships
@@ -1048,6 +1067,69 @@ function force_2fa_bootstrap_self_update() {
 }
 
 /**
+ * Site Health test callback: report whether — and why — self-update is running.
+ *
+ * Computes the same inputs the updater bootstrap uses and defers the verdict to the
+ * pure force_2fa_self_update_status(). An intentional state (active, or a
+ * deliberate opt-out) reports "good"; a likely-unintended one (a working-copy .git
+ * on a production site, absent updater files, or a blank Update URI) reports
+ * "recommended" — visible to an admin, never a page-nagging notice.
+ *
+ * @return array A Site Health result.
+ */
+function force_2fa_site_health_self_update() {
+	// @codeCoverageIgnoreStart
+	$puc_bootstrap  = __DIR__ . '/vendor/yahnis-elsts/plugin-update-checker/plugin-update-checker.php';
+	$headers        = get_file_data( __FILE__, array( 'update_uri' => 'Update URI' ) );
+	$has_update_uri = isset( $headers['update_uri'] ) && '' !== trim( $headers['update_uri'] );
+
+	$status = force_2fa_self_update_status(
+		force_2fa_self_update_enabled(),
+		file_exists( __DIR__ . '/.git' ),
+		is_readable( $puc_bootstrap ),
+		$has_update_uri
+	);
+
+	$result = array(
+		'label'       => __( 'Require Email 2FA is receiving updates', 'force-email-two-factor' ),
+		'status'      => 'good',
+		'badge'       => array(
+			'label' => __( 'Security', 'force-email-two-factor' ),
+			'color' => 'blue',
+		),
+		'description' => '',
+		'test'        => 'force_2fa_self_update',
+	);
+
+	switch ( $status ) {
+		case 'active':
+			$result['description'] = '<p>' . esc_html__( 'This plugin updates directly from its GitHub Releases, through the normal Dashboard &rarr; Updates flow and unattended auto-updates.', 'force-email-two-factor' ) . '</p>';
+			break;
+		case 'disabled_config':
+			$result['description'] = '<p>' . esc_html__( 'Self-update is intentionally disabled (FORCE_2FA_DISABLE_SELF_UPDATE). Updates are expected to be delivered by your plugin management layer, e.g. MainWP, Composer, or git deploys.', 'force-email-two-factor' ) . '</p>';
+			break;
+		case 'disabled_vcs':
+			$result['status']      = 'recommended';
+			$result['label']       = __( 'Require Email 2FA is not self-updating (working copy)', 'force-email-two-factor' );
+			$result['description'] = '<p>' . esc_html__( 'A .git directory is present, so WordPress will not replace this working copy with a release. On a production site, install the release zip instead; if this is intentional, update it via git or your management layer.', 'force-email-two-factor' ) . '</p>';
+			break;
+		case 'unavailable_no_puc':
+			$result['status']      = 'recommended';
+			$result['label']       = __( 'Require Email 2FA cannot self-update (updater files missing)', 'force-email-two-factor' );
+			$result['description'] = '<p>' . esc_html__( 'The bundled updater files are missing, so this plugin cannot check for updates. Reinstall it from the official release zip.', 'force-email-two-factor' ) . '</p>';
+			break;
+		case 'disabled_no_update_uri':
+			$result['status']      = 'recommended';
+			$result['label']       = __( 'Require Email 2FA is not self-updating (no update source)', 'force-email-two-factor' );
+			$result['description'] = '<p>' . esc_html__( 'The Update URI header is empty, so no update source is configured. Point it at the source repository to receive updates.', 'force-email-two-factor' ) . '</p>';
+			break;
+	}
+
+	return $result;
+	// @codeCoverageIgnoreEnd
+}
+
+/**
  * Register this plugin's WordPress hooks.
  *
  * Called once at load (below); also unit-tested directly, so the registrations
@@ -1074,6 +1156,10 @@ function force_2fa_register_hooks() {
 	// Admin must see the warning there, not only on the affected subsite's dashboard.
 	add_action( 'admin_notices', 'force_2fa_legacy_activation_notice' );
 	add_action( 'network_admin_notices', 'force_2fa_legacy_activation_notice' );
+
+	// Site Health: report the self-update posture (Tools → Site Health) instead of a
+	// nagging notice when the updater isn't running.
+	add_filter( 'site_status_tests', 'force_2fa_register_site_health' );
 }
 
 // Network-only on multisite: refuse per-site activation (see the function docblock).
