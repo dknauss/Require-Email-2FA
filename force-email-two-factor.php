@@ -848,6 +848,25 @@ function force_2fa_handle_install_two_factor() {
 // @codeCoverageIgnoreEnd
 
 /**
+ * Get — or, from the bootstrap, record — the wired Plugin Update Checker instance.
+ *
+ * Shared accessor so diagnostics and the update E2E (bin/update-e2e.sh) reach the
+ * exact checker instance WordPress uses instead of guessing it from hook tables.
+ * Null when self-update is inactive: a git checkout, a missing vendored PUC, or a
+ * blank Update URI header (see force_2fa_bootstrap_self_update()).
+ *
+ * @param object|null $checker Internal — the instance to record (bootstrap only).
+ * @return object|null The active update checker, or null when none is wired.
+ */
+function force_2fa_update_checker( $checker = null ) {
+	static $instance = null;
+	if ( null !== $checker ) {
+		$instance = $checker;
+	}
+	return $instance;
+}
+
+/**
  * Wire self-hosted plugin updates from the GitHub repository named in Update URI.
  *
  * WordPress core only checks WordPress.org for plugin updates; this plugin ships
@@ -923,6 +942,8 @@ function force_2fa_bootstrap_self_update() {
 	// as the only update payload, which is the documented trust boundary.
 	$vcs_api = $update_checker->getVcsApi();
 	$vcs_api->enableReleaseAssets( '/' . preg_quote( $slug, '/' ) . '\.zip$/i', $vcs_api::REQUIRE_RELEASE_ASSETS );
+
+	force_2fa_update_checker( $update_checker );
 	// @codeCoverageIgnoreEnd
 }
 

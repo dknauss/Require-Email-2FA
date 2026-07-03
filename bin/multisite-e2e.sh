@@ -3,8 +3,8 @@
 # Real WordPress multisite end-to-end check for the network-only behavior.
 #
 # Uses the SQLite database drop-in so it needs no MySQL server — it runs
-# identically on a laptop and in CI. WP-CLI is invoked with a raised memory limit
-# because unpacking the core tarball exceeds the stock 128M on some setups.
+# identically on a laptop and in CI. Tooling versions and checksums are pinned
+# in bin/lib/e2e-common.sh.
 #
 # Asserts, on a real multisite:
 #   - a per-site `wp plugin activate` is REFUSED (the register_activation_hook
@@ -21,20 +21,17 @@ WP="$WORK/wp"
 mkdir -p "$WP"
 trap 'rm -rf "$WORK"' EXIT
 
-WP_CLI_PHAR="$WORK/wp-cli.phar"
-curl -sSL https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -o "$WP_CLI_PHAR"
+# shellcheck source=bin/lib/e2e-common.sh
+. "$PLUGIN_DIR/bin/lib/e2e-common.sh"
 
-# WP-CLI wrapper: enough memory for extraction, E_DEPRECATED silenced (WP-CLI on
-# bleeding-edge PHP is noisy), and --path baked in.
-wp() { php -d memory_limit=512M -d error_reporting=24575 "$WP_CLI_PHAR" --path="$WP" "$@"; }
+echo "==> Fetch pinned WP-CLI ${E2E_WP_CLI_VERSION} (checksum-verified)"
+e2e_fetch_wp_cli
 
 echo "==> Download WordPress (${WP_VERSION:-latest})"
 wp core download --version="${WP_VERSION:-latest}"
 
-echo "==> SQLite database drop-in (no MySQL server needed)"
-curl -sSL https://downloads.wordpress.org/plugin/sqlite-database-integration.zip -o "$WORK/sdi.zip"
-unzip -q "$WORK/sdi.zip" -d "$WP/wp-content/plugins/"
-cp "$WP/wp-content/plugins/sqlite-database-integration/db.copy" "$WP/wp-content/db.php"
+echo "==> SQLite database drop-in ${E2E_SDI_VERSION} (checksum-verified, no MySQL server needed)"
+e2e_install_sqlite_dropin
 
 echo "==> Install multisite"
 wp config create --dbname=wp --dbuser=root --dbpass="" --dbhost=localhost --skip-check --force
