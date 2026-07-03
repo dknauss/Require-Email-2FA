@@ -11,7 +11,7 @@ updater instead (see [Mode B](#mode-b--centrally-managed-updater-off)).
 | **Best for** | Sites you don't manage from one console | Sites under MainWP / Composer / git deploys |
 | **Self-updater** | On (default) | Off (`FORCE_2FA_DISABLE_SELF_UPDATE`) |
 | **Who delivers patches** | The site itself, from GitHub Releases | Your management layer |
-| **Each site polls GitHub?** | Yes (admin/cron only) | No |
+| **Each site polls GitHub?** | Yes (via PUC update checks) | No |
 | **Remote code path on the site** | Yes (GitHub Releases → auto-install) | None |
 | **Install method** | Release zip | Release zip, Composer, or git |
 
