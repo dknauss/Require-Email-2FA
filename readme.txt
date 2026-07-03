@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.9.1
+Stable tag: 1.10.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -171,6 +171,28 @@ only allowlisted accounts using Application Passwords can skip the interactive
 challenge.
 
 == Changelog ==
+
+= 1.10.0 =
+* Deployment: new `FORCE_2FA_DISABLE_SELF_UPDATE` constant (and
+  `force_2fa_self_update_enabled` filter) to turn off the self-updater on sites
+  patched by a central manager (MainWP, Composer, git deploys), so each site does
+  not independently poll GitHub. One codebase, two modes; enforcement is unchanged.
+  See `docs/DEPLOYMENT.md`.
+* Site Health: a new **Tools &rarr; Site Health** check reports whether — and why —
+  self-update is running (active, intentionally disabled, a working-copy `.git`,
+  missing updater files, or a blank Update URI), instead of a page-nagging notice.
+* Performance: the self-updater is now built only in admin, cron, and WP-CLI
+  requests. Front-end page views skip the plugin-header read and Plugin Update
+  Checker construction entirely; manual and automatic updates are unaffected.
+* Multisite: the legacy per-site activation warning now also shows in Network
+  Admin, where a super admin manages this network-only plugin.
+* Updater hardening: the release-asset match is anchored to exactly
+  `force-email-two-factor.zip` (defense-in-depth).
+* i18n: use a literal `&` in the install-button labels (translators no longer see
+  a raw `&amp;` entity).
+* Tests & docs: added coverage for the Application-Password user binding, the
+  enforcement filter's argument count, and the dependency-unmet fail-safe;
+  corrected stale hook-ordering and dependency-guard descriptions.
 
 = 1.9.1 =
 * Updater: **require** the release asset. The self-updater now installs only the
