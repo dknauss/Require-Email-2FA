@@ -782,10 +782,8 @@ function force_2fa_active_only_per_site() {
  * Shown to super admins only (they alone can migrate it). The activation guard
  * blocks NEW per-site activations, but an install that predates 1.9.0 keeps
  * running per-site until deactivated — this nudges the admin to Network Activate.
- * Registered on both admin_notices and network_admin_notices so a super admin sees
- * it from Network Admin (where they manage this network-only plugin), not only on
- * the affected subsite's own dashboard. force_2fa_active_only_per_site() reads the
- * current site's option, so in Network Admin it reflects the main site.
+ * Hooked to admin_notices (per-subsite), not network_admin_notices: see the note
+ * at the registration in force_2fa_register_hooks().
  */
 function force_2fa_legacy_activation_notice() {
 	if ( ! force_2fa_should_warn_legacy_per_site(
@@ -1182,11 +1180,14 @@ function force_2fa_register_hooks() {
 	add_action( 'network_admin_notices', 'force_2fa_network_dependency_notice' );
 	add_action( 'admin_post_force_2fa_install_two_factor', 'force_2fa_handle_install_two_factor' );
 
-	// Migration nudge for installs that were per-site active before 1.9.0. On both
-	// notice hooks: a super admin managing this network-only plugin from Network
-	// Admin must see the warning there, not only on the affected subsite's dashboard.
+	// Migration nudge for installs that were per-site active before 1.9.0. Only on
+	// admin_notices (per-subsite), deliberately NOT network_admin_notices: the
+	// network screen runs in the main-site context, where force_2fa_active_only_per_site()
+	// sees only the main site's active_plugins — so it cannot reliably surface a
+	// legacy activation on another subsite without a network-wide per-site scan,
+	// which is disproportionate for a pre-1.9.0-only nudge (new installs can't reach
+	// that state — per-site activation is blocked).
 	add_action( 'admin_notices', 'force_2fa_legacy_activation_notice' );
-	add_action( 'network_admin_notices', 'force_2fa_legacy_activation_notice' );
 
 	// Site Health: report the self-update posture (Tools → Site Health) instead of a
 	// nagging notice when the updater isn't running.

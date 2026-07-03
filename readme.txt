@@ -200,8 +200,6 @@ challenge.
 * Performance: the self-updater is now built only in admin, cron, and WP-CLI
   requests. Front-end page views skip the plugin-header read and Plugin Update
   Checker construction entirely; manual and automatic updates are unaffected.
-* Multisite: the legacy per-site activation warning now also shows in Network
-  Admin, where a super admin manages this network-only plugin.
 * Updater hardening: the release-asset match is anchored to exactly
   `force-email-two-factor.zip` (defense-in-depth).
 * i18n: use a literal `&` in the install-button labels (translators no longer see

@@ -69,11 +69,11 @@ final class DependencyCheckTest extends TestCase {
 		$this->assertContains( 'network_admin_notices', $tags );
 	}
 
-	public function test_register_hooks_wires_the_legacy_notice_on_both_notice_hooks(): void {
-		// The legacy per-site migration warning is the only in-product signal that
-		// enforcement is missing on other sites. A super admin managing this
-		// network-only plugin from Network Admin must see it there too, not only on a
-		// subsite dashboard — so it is registered on both notice hooks.
+	public function test_register_hooks_wires_the_legacy_notice_per_subsite_only(): void {
+		// Deliberately NOT on network_admin_notices: that runs in the main-site
+		// context, where force_2fa_active_only_per_site() sees only the main site's
+		// option and so cannot reliably detect a legacy activation on another subsite
+		// without a network-wide scan (out of scope for a pre-1.9.0-only nudge).
 		$GLOBALS['__force2fa_added_actions'] = array();
 		force_2fa_register_hooks();
 
@@ -85,7 +85,7 @@ final class DependencyCheckTest extends TestCase {
 		}
 
 		$this->assertContains( 'admin_notices', $hooks_for_legacy_notice );
-		$this->assertContains( 'network_admin_notices', $hooks_for_legacy_notice );
+		$this->assertNotContains( 'network_admin_notices', $hooks_for_legacy_notice );
 	}
 
 	public function test_should_nag_network_when_self_network_active_and_dep_missing(): void {
