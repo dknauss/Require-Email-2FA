@@ -16,6 +16,7 @@
             <file>tests/EnabledProvidersFilterTest.php</file>
             <file>tests/ApiLoginFilterTest.php</file>
             <file>tests/DependencyCheckTest.php</file>
+            <file>tests/UpdateCheckerAccessorTest.php</file>
         </testsuite>
         <testsuite name="integration">
             <file>tests/IntegrationTest.php</file>
