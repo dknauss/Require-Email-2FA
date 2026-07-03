@@ -197,9 +197,6 @@ challenge.
 * Site Health: a new **Tools &rarr; Site Health** check reports whether — and why —
   self-update is running (active, intentionally disabled, a working-copy `.git`,
   missing updater files, or a blank Update URI), instead of a page-nagging notice.
-* Performance: the self-updater is now built only in admin, cron, and WP-CLI
-  requests. Front-end page views skip the plugin-header read and Plugin Update
-  Checker construction entirely; manual and automatic updates are unaffected.
 * Updater hardening: the release-asset match is anchored to exactly
   `force-email-two-factor.zip` (defense-in-depth).
 * Removed the pre-1.9.0 per-site "legacy activation" migration notice. Since 1.9.0

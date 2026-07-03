@@ -975,22 +975,15 @@ function force_2fa_register_site_health( $tests ) {
  * unit-test bootstrap — which records add_action() without ever firing it — never
  * instantiates PUC against WordPress functions it does not stub.
  *
- * Runs only in admin/cron/CLI contexts (front-end requests skip it, see below) and
- * only when self-update is enabled (force_2fa_self_update_enabled()).
+ * Wired on every request (not gated to admin/cron/CLI): Plugin Update Checker
+ * injects available-update data on read via the site_transient_update_plugins
+ * filter, and that data is read outside the admin too — the front-end admin
+ * toolbar's update count for logged-in admins, REST requests, and management
+ * tools — so the injector must always be registered. Only self-update being
+ * disabled or a working copy short-circuits it (below).
  */
 function force_2fa_bootstrap_self_update() {
 	// @codeCoverageIgnoreStart
-	// Update checks and installs happen only in the admin, wp-cron, and WP-CLI
-	// contexts, so skip building Plugin Update Checker on front-end requests — the
-	// bulk of traffic. This trims a plugin-header read plus object construction from
-	// every public request and keeps the updater off the public request path
-	// entirely. PUC hooks admin_init, the plugin-update cron, and
-	// site_transient_update_plugins — all of which fire in these contexts — so both
-	// manual and automatic updates are unaffected.
-	if ( ! is_admin() && ! wp_doing_cron() && ! ( defined( 'WP_CLI' ) && WP_CLI ) ) {
-		return;
-	}
-
 	// Explicit opt-out for centrally-managed fleets (MainWP, Composer, git deploys):
 	// leave patching to the management layer instead of each site polling GitHub.
 	if ( ! force_2fa_self_update_enabled() ) {
