@@ -526,8 +526,8 @@ function force_2fa_dependency_notice() {
 
 		printf(
 			'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p><a href="%3$s" class="button button-primary">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
-			esc_html__( 'Require Email 2FA is not enforcing yet.', 'force-email-two-factor' ),
-			esc_html__( 'It needs the Two Factor plugin to be installed and active. Until then, two-factor is NOT being enforced for any user.', 'force-email-two-factor' ),
+			esc_html__( 'Require Email 2FA is not enforcing 2FA by email yet.', 'force-email-two-factor' ),
+			esc_html__( 'It needs the Two Factor plugin to be installed and active. Until then, 2FA is not enforced for any user.', 'force-email-two-factor' ),
 			esc_url( $install_url ),
 			esc_html__( 'Install &amp; activate Two Factor', 'force-email-two-factor' ),
 			esc_url( 'https://wordpress.org/plugins/two-factor/' ),
@@ -543,8 +543,8 @@ function force_2fa_dependency_notice() {
 
 	printf(
 		'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
-		esc_html__( 'Require Email 2FA is not enforcing on this site.', 'force-email-two-factor' ),
-		esc_html__( 'The Two Factor plugin is not active here, so two-factor is NOT being enforced for this site. Ask your network administrator to network-activate Two Factor.', 'force-email-two-factor' )
+		esc_html__( 'Require Email 2FA is not enforcing 2FA by email on this site.', 'force-email-two-factor' ),
+		esc_html__( 'The Two Factor plugin is not active here, so 2FA is not enforced for this site. Ask your network administrator to network-activate Two Factor.', 'force-email-two-factor' )
 	);
 }
 
