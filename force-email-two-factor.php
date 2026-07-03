@@ -2,6 +2,7 @@
 /**
  * Plugin Name:      Require Email 2FA
  * Plugin URI:       https://github.com/dknauss/Require-Email-2FA
+ * Update URI:       https://github.com/dknauss/Require-Email-2FA
  * Description:      Requires the Two Factor plugin and makes emailed 2FA the default, required login factor for all users.
  * Author:           Pixel
  * Author URI:       https://wearepixel.ca
@@ -48,6 +49,21 @@
  *
  * Requires the Two Factor plugin: https://wordpress.org/plugins/two-factor/
  * If that plugin is inactive, every guard below no-ops safely (see notes).
+ *
+ * ---------------------------------------------------------------------------
+ * SELF-HOSTED UPDATES (and forking)
+ * ---------------------------------------------------------------------------
+ * This plugin is distributed from GitHub, not WordPress.org. The "Update URI"
+ * header above is the single source of truth for updates: WordPress core (5.8+)
+ * reads it and refuses to let WordPress.org serve updates for this slug (so a
+ * same-named .org plugin can never hijack it), and force_2fa_bootstrap_self_update()
+ * feeds it to Plugin Update Checker to pull new versions from that repo's Releases.
+ *
+ * TO FORK: point the "Update URI" header at your own repository. That one change
+ * redirects both the updater and core's update-ownership to your fork. (Leaving it
+ * on the upstream repo would auto-update every site back to upstream — do not.)
+ * Everything else (slug, download asset) derives from the plugin folder name; only
+ * a rename also needs the release workflow's PLUGIN_SLUG updated to match.
  *
  * ---------------------------------------------------------------------------
  * EMERGENCY KILL SWITCH
@@ -751,6 +767,71 @@ function force_2fa_handle_install_two_factor() {
 // @codeCoverageIgnoreEnd
 
 /**
+ * Wire self-hosted plugin updates from the GitHub repository named in Update URI.
+ *
+ * WordPress core only checks WordPress.org for plugin updates; this plugin ships
+ * from GitHub. Plugin Update Checker (PUC) injects update metadata into WP's update
+ * system: it compares the installed Version header against the latest GitHub Release
+ * and, when a newer one exists, offers that release's attached "<slug>.zip" through
+ * the normal update flow — Dashboard → Updates, and unattended auto-updates where
+ * the site has them enabled.
+ *
+ * Configuration is header-driven so a fork changes exactly one line (see the
+ * "SELF-HOSTED UPDATES" note in the file header):
+ *   - the repository comes from the Update URI header, which also stops
+ *     WordPress.org from serving updates for this slug (collision protection: core
+ *     honours a non-.org Update URI, and PUC additionally excludes this plugin from
+ *     the wordpress.org update check by default);
+ *   - the slug and the download asset name derive from the installed plugin folder,
+ *     which the release workflow builds under the same name — nothing is hardcoded.
+ *
+ * PUC is a Composer dependency, bundled under vendor/ in the release zip built by
+ * .github/workflows/release.yml but absent from a bare git checkout. When it is
+ * missing (running from source, or the Playground CI mount) this is a deliberate
+ * no-op: the plugin does not self-update, which is correct for a working copy that
+ * is updated via git.
+ *
+ * Registered on plugins_loaded rather than at file load so the zero-dependency
+ * unit-test bootstrap — which records add_action() without ever firing it — never
+ * instantiates PUC against WordPress functions it does not stub.
+ */
+function force_2fa_bootstrap_self_update() {
+	// @codeCoverageIgnoreStart
+	$puc_bootstrap = __DIR__ . '/vendor/yahnis-elsts/plugin-update-checker/plugin-update-checker.php';
+	if ( ! is_readable( $puc_bootstrap ) ) {
+		return;
+	}
+
+	// Repository comes from the Update URI header (the fork's single knob). Bail if
+	// it is absent so an un-pointed fork simply does not self-update.
+	$headers  = get_file_data( __FILE__, array( 'update_uri' => 'Update URI' ) );
+	$repo_url = isset( $headers['update_uri'] ) ? trim( $headers['update_uri'] ) : '';
+	if ( '' === $repo_url ) {
+		return;
+	}
+
+	require_once $puc_bootstrap;
+
+	// Slug = the installed plugin folder name. The release workflow builds the zip,
+	// its top-level folder, and the release asset under this same name, so the
+	// checker, the downloaded asset, and PUC's WordPress.org exclusion all key off
+	// one value with nothing hardcoded to this particular fork.
+	$slug = basename( __DIR__ );
+
+	$update_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+		$repo_url,
+		__FILE__,
+		$slug
+	);
+
+	// Follow published Releases and download the versioned "<slug>.zip" asset built
+	// by the release workflow — not GitHub's auto-generated source archive, which
+	// omits vendor/ (and therefore PUC itself on the next update).
+	$update_checker->getVcsApi()->enableReleaseAssets( '/' . preg_quote( $slug, '/' ) . '\.zip$/i' );
+	// @codeCoverageIgnoreEnd
+}
+
+/**
  * Register this plugin's WordPress hooks.
  *
  * Called once at load (below); also unit-tested directly, so the registrations
@@ -774,6 +855,9 @@ function force_2fa_register_hooks() {
 
 // Network-only on multisite: refuse per-site activation (see the function docblock).
 register_activation_hook( __FILE__, 'force_2fa_block_single_site_activation' );
+
+// Self-hosted updates from GitHub Releases (see force_2fa_bootstrap_self_update()).
+add_action( 'plugins_loaded', 'force_2fa_bootstrap_self_update' );
 
 force_2fa_register_hooks();
 

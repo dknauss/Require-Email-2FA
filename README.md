@@ -264,6 +264,36 @@ The plugin checks this constant at load time and registers nothing when it's set
   core's application-password handler at priority 20, so the app-password marker
   is reliably set by the time the decision is made.
 
+- **Self-hosted updates (no WordPress.org, no collisions):** distributed from
+  GitHub, so `force_2fa_bootstrap_self_update()` registers
+  [Plugin Update Checker](https://github.com/YahnisElsts/plugin-update-checker)
+  (a Composer dependency) on `plugins_loaded`. It reads the repository from the
+  **`Update URI`** plugin header, compares the installed `Version` against the
+  latest GitHub **Release**, and offers that release's attached `<slug>.zip`
+  through the normal Dashboard → Updates flow and unattended auto-updates. The zip
+  (plugin + `vendor/`) is built and published by
+  [`.github/workflows/release.yml`](.github/workflows/release.yml) on every `v*`
+  tag. PUC lives under `vendor/` only in that release build; in a bare git checkout
+  it is absent and self-update is a deliberate no-op (update via `git` instead).
+
+  Two independent guards keep a same-named WordPress.org plugin from ever hijacking
+  the update: WordPress core honours the non-`.org` `Update URI` and declines to
+  serve `.org` updates for the slug, and PUC also excludes this plugin from the
+  wordpress.org update check by default.
+
+  > [!IMPORTANT]
+  > Because updates install straight from GitHub with no WordPress.org review gate,
+  > the release pipeline is part of this plugin's trust boundary. Protect the
+  > tag/release path — branch protection, least-privilege `GITHUB_TOKEN` (the
+  > workflow requests only `contents: write`), and review of any change to the
+  > release workflow or its actions.
+
+- **Forking:** point the `Update URI` header at your own repository — that single
+  change redirects both the updater and core's update-ownership to your fork.
+  (Leaving it on the upstream repo would auto-update every site back to upstream.)
+  The slug and download-asset name derive from the plugin folder, so only a rename
+  additionally needs the workflow's `PLUGIN_SLUG` updated to match.
+
 ---
 
 ## Requirements & dependencies
@@ -412,7 +442,11 @@ Before tagging a release:
 - [ ] Run `vendor/bin/phpunit --coverage-text` with PCOV or Xdebug if validating
       local coverage.
 - [ ] Smoke-test at least one real login flow (sign in → email 2FA challenge → in).
-- [ ] Tag the release and publish release notes from the changelog.
+- [ ] Tag the release as `vX.Y.Z` and push the tag. The `Release` workflow verifies
+      the tag matches the `Version` header, builds `force-email-two-factor.zip`
+      (plugin + production `vendor/`), and publishes it as a Release asset — this
+      asset is what Plugin Update Checker serves to installed sites, so a release is
+      not complete until the workflow has published it.
 
 ## License
 

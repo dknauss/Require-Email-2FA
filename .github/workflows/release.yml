@@ -1,0 +1,79 @@
+name: Release
+
+# Build the distributable plugin zip and publish it as a GitHub Release asset on
+# every version tag (v1.2.3). The zip is what Plugin Update Checker downloads for
+# in-place / auto-updates on installed sites, so it must contain the plugin plus
+# its production Composer dependencies (vendor/, which is git-ignored).
+#
+# Fork knob: PLUGIN_SLUG is the plugin's folder/main-file/zip name. A fork that
+# renames the plugin changes it here; the runtime updater derives the same value
+# from the installed folder, so the two stay in sync. Everything else is
+# repo-relative (GITHUB_REF_NAME, GITHUB_TOKEN, gh) and needs no per-fork edits.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # create the Release and upload the asset
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish plugin zip
+    runs-on: ubuntu-latest
+    env:
+      PLUGIN_SLUG: force-email-two-factor
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      - name: Verify tag matches the plugin Version header
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          header="$(sed -n 's/^[[:space:]]*\*[[:space:]]*Version:[[:space:]]*//p' "${PLUGIN_SLUG}.php" | head -n1 | tr -d '[:space:]')"
+          echo "Tag version:    ${tag}"
+          echo "Header version: ${header}"
+          if [ "${tag}" != "${header}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match Version: ${header} in ${PLUGIN_SLUG}.php. Bump the header (and FORCE_2FA_LOADED / readme.txt Stable tag) before tagging."
+            exit 1
+          fi
+
+      - name: Install production dependencies
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+      - name: Assemble plugin directory
+        run: |
+          mkdir -p "build/${PLUGIN_SLUG}"
+          # git archive honours .gitattributes export-ignore, so tests/, .github/,
+          # composer.* and other dev-only files are stripped from the payload.
+          git archive HEAD | tar -x -C "build/${PLUGIN_SLUG}"
+          # Add production Composer deps (PUC), which are not tracked in git.
+          cp -R vendor "build/${PLUGIN_SLUG}/vendor"
+
+      - name: Create zip
+        run: |
+          ( cd build && zip -qr "../${PLUGIN_SLUG}.zip" "${PLUGIN_SLUG}" )
+          unzip -l "${PLUGIN_SLUG}.zip" | tail -n 20
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release upload "${tag}" "${PLUGIN_SLUG}.zip" --clobber
+          else
+            gh release create "${tag}" "${PLUGIN_SLUG}.zip" \
+              --title "${tag}" \
+              --generate-notes
+          fi
