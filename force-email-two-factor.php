@@ -769,6 +769,10 @@ function force_2fa_active_only_per_site() {
  * Shown to super admins only (they alone can migrate it). The activation guard
  * blocks NEW per-site activations, but an install that predates 1.9.0 keeps
  * running per-site until deactivated — this nudges the admin to Network Activate.
+ * Registered on both admin_notices and network_admin_notices so a super admin sees
+ * it from Network Admin (where they manage this network-only plugin), not only on
+ * the affected subsite's own dashboard. force_2fa_active_only_per_site() reads the
+ * current site's option, so in Network Admin it reflects the main site.
  */
 function force_2fa_legacy_activation_notice() {
 	if ( ! force_2fa_should_warn_legacy_per_site(
@@ -970,8 +974,11 @@ function force_2fa_register_hooks() {
 	add_action( 'network_admin_notices', 'force_2fa_network_dependency_notice' );
 	add_action( 'admin_post_force_2fa_install_two_factor', 'force_2fa_handle_install_two_factor' );
 
-	// Migration nudge for installs that were per-site active before 1.9.0.
+	// Migration nudge for installs that were per-site active before 1.9.0. On both
+	// notice hooks: a super admin managing this network-only plugin from Network
+	// Admin must see the warning there, not only on the affected subsite's dashboard.
 	add_action( 'admin_notices', 'force_2fa_legacy_activation_notice' );
+	add_action( 'network_admin_notices', 'force_2fa_legacy_activation_notice' );
 }
 
 // Network-only on multisite: refuse per-site activation (see the function docblock).
