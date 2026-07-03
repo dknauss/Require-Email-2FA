@@ -69,25 +69,6 @@ final class DependencyCheckTest extends TestCase {
 		$this->assertContains( 'network_admin_notices', $tags );
 	}
 
-	public function test_register_hooks_wires_the_legacy_notice_per_subsite_only(): void {
-		// Deliberately NOT on network_admin_notices: that runs in the main-site
-		// context, where force_2fa_active_only_per_site() sees only the main site's
-		// option and so cannot reliably detect a legacy activation on another subsite
-		// without a network-wide scan (out of scope for a pre-1.9.0-only nudge).
-		$GLOBALS['__force2fa_added_actions'] = array();
-		force_2fa_register_hooks();
-
-		$hooks_for_legacy_notice = array();
-		foreach ( $GLOBALS['__force2fa_added_actions'] as $registration ) {
-			if ( 'force_2fa_legacy_activation_notice' === $registration[1] ) {
-				$hooks_for_legacy_notice[] = $registration[0];
-			}
-		}
-
-		$this->assertContains( 'admin_notices', $hooks_for_legacy_notice );
-		$this->assertNotContains( 'network_admin_notices', $hooks_for_legacy_notice );
-	}
-
 	public function test_should_nag_network_when_self_network_active_and_dep_missing(): void {
 		// Require Email 2FA is network-active but Two Factor is not network-active,
 		// and the super admin can act → the network-admin notice should show.
@@ -162,25 +143,5 @@ final class DependencyCheckTest extends TestCase {
 		// Not multisite → per-site activation is the only mode; always allowed.
 		$this->assertFalse( force_2fa_activation_blocked( false, false ) );
 		$this->assertFalse( force_2fa_activation_blocked( false, true ) );
-	}
-
-	public function test_warn_legacy_per_site_when_active_only_per_site_on_multisite(): void {
-		// Upgraded install that was activated per-site before 1.9.0: warn the super
-		// admin so they migrate to network activation.
-		$this->assertTrue( force_2fa_should_warn_legacy_per_site( true, true, true ) );
-	}
-
-	public function test_no_legacy_warning_when_not_multisite(): void {
-		$this->assertFalse( force_2fa_should_warn_legacy_per_site( false, true, true ) );
-	}
-
-	public function test_no_legacy_warning_when_network_active(): void {
-		// Not "only per-site" (it's network-active) → nothing to migrate.
-		$this->assertFalse( force_2fa_should_warn_legacy_per_site( true, false, true ) );
-	}
-
-	public function test_no_legacy_warning_when_user_cannot_manage_network(): void {
-		// Only a super admin can migrate it, so only they see the actionable warning.
-		$this->assertFalse( force_2fa_should_warn_legacy_per_site( true, true, false ) );
 	}
 }

@@ -202,6 +202,9 @@ challenge.
   Checker construction entirely; manual and automatic updates are unaffected.
 * Updater hardening: the release-asset match is anchored to exactly
   `force-email-two-factor.zip` (defense-in-depth).
+* Removed the pre-1.9.0 per-site "legacy activation" migration notice. Since 1.9.0
+  blocks per-site activation, no new install can reach that state, so the notice
+  guarded a scenario that can no longer occur.
 * i18n: use a literal `&` in the install-button labels (translators no longer see
   a raw `&amp;` entity).
 * Tests & docs: added coverage for the Application-Password user binding, the

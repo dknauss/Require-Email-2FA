@@ -233,23 +233,6 @@ function force_2fa_activation_blocked( $is_multisite, $network_wide ) {
 }
 
 /**
- * Whether to warn about a legacy per-site activation on multisite.
- *
- * The activation guard only blocks NEW per-site activations; an install that was
- * already active per-site before 1.9.0 keeps running in that weaker mode after the
- * update. This surfaces it so a super admin can migrate it to network activation.
- * Pure decision, unit-tested; force_2fa_legacy_activation_notice() is the glue.
- *
- * @param bool $is_multisite            Whether this is a multisite network.
- * @param bool $active_only_per_site    Active in the site option but NOT network-active.
- * @param bool $user_can_manage_network Whether the user can manage network plugins.
- * @return bool True if the migration warning should render.
- */
-function force_2fa_should_warn_legacy_per_site( $is_multisite, $active_only_per_site, $user_can_manage_network ) {
-	return (bool) $is_multisite && (bool) $active_only_per_site && (bool) $user_can_manage_network;
-}
-
-/**
  * Roles to EXCLUDE from forced two-factor.
  *
  * Default is an empty array → enforcement applies to ALL users. Add role slugs
@@ -758,50 +741,6 @@ function force_2fa_block_single_site_activation( $network_wide ) {
 }
 
 /**
- * Whether this plugin is active in the current site's option but NOT network-active.
- *
- * Distinguishes a legacy per-site activation from a network activation and from an
- * mu-loaded install (which is in neither option). Used only to warn about the
- * pre-1.9.0 per-site mode.
- *
- * @return bool
- */
-function force_2fa_active_only_per_site() {
-	if ( ! function_exists( 'is_plugin_active' ) ) {
-		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-	}
-	$self = plugin_basename( __FILE__ );
-	return is_multisite()
-		&& in_array( $self, (array) get_option( 'active_plugins', array() ), true )
-		&& ! is_plugin_active_for_network( $self );
-}
-
-/**
- * Notice: this plugin is active per-site on multisite (legacy mode).
- *
- * Shown to super admins only (they alone can migrate it). The activation guard
- * blocks NEW per-site activations, but an install that predates 1.9.0 keeps
- * running per-site until deactivated — this nudges the admin to Network Activate.
- * Hooked to admin_notices (per-subsite), not network_admin_notices: see the note
- * at the registration in force_2fa_register_hooks().
- */
-function force_2fa_legacy_activation_notice() {
-	if ( ! force_2fa_should_warn_legacy_per_site(
-		is_multisite(),
-		force_2fa_active_only_per_site(),
-		current_user_can( 'manage_network_plugins' )
-	) ) {
-		return;
-	}
-
-	printf(
-		'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
-		esc_html__( 'Require Email 2FA is active on this site only.', 'force-email-two-factor' ),
-		esc_html__( 'On multisite it should be Network Activated so enforcement can\'t be skipped via a site where it is inactive. Deactivate it here and Network Activate it from Network Admin → Plugins.', 'force-email-two-factor' )
-	);
-}
-
-/**
  * Handle the one-click "Install & activate Two Factor" action.
  *
  * Installs the plugin from the WordPress.org repository if it is not already on
@@ -1179,15 +1118,6 @@ function force_2fa_register_hooks() {
 	add_action( 'admin_notices', 'force_2fa_dependency_notice' );
 	add_action( 'network_admin_notices', 'force_2fa_network_dependency_notice' );
 	add_action( 'admin_post_force_2fa_install_two_factor', 'force_2fa_handle_install_two_factor' );
-
-	// Migration nudge for installs that were per-site active before 1.9.0. Only on
-	// admin_notices (per-subsite), deliberately NOT network_admin_notices: the
-	// network screen runs in the main-site context, where force_2fa_active_only_per_site()
-	// sees only the main site's active_plugins — so it cannot reliably surface a
-	// legacy activation on another subsite without a network-wide per-site scan,
-	// which is disproportionate for a pre-1.9.0-only nudge (new installs can't reach
-	// that state — per-site activation is blocked).
-	add_action( 'admin_notices', 'force_2fa_legacy_activation_notice' );
 
 	// Site Health: report the self-update posture (Tools → Site Health) instead of a
 	// nagging notice when the updater isn't running.
