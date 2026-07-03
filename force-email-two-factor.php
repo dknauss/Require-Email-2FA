@@ -261,6 +261,29 @@ function force_2fa_dependency_heads_up_body( $installed ) {
 }
 
 /**
+ * Classify why the Two Factor dependency is unmet, for the notice copy.
+ *
+ * Called only when force_2fa_dependency_met() is already false. Distinguishes the
+ * three reasons so a notice never offers a fix that can't work:
+ *   - 'absent'   — not installed on disk (needs install + activate),
+ *   - 'inactive' — installed but not active (needs activate),
+ *   - 'unusable' — Two Factor is loaded/active but its Email provider is
+ *                  unregistered (activation is a no-op; the provider must be
+ *                  restored). This is why $tf_loaded wins over $installed.
+ * Pure decision, unit-tested.
+ *
+ * @param bool $installed Whether two-factor/two-factor.php is present on disk.
+ * @param bool $tf_loaded Whether Two_Factor_Core is loaded (Two Factor active here).
+ * @return string One of 'absent', 'inactive', 'unusable'.
+ */
+function force_2fa_dependency_state( $installed, $tf_loaded ) {
+	if ( $tf_loaded ) {
+		return 'unusable';
+	}
+	return $installed ? 'inactive' : 'absent';
+}
+
+/**
  * Whether this plugin runs network-wide on multisite.
  *
  * True when it is formally network-active OR mu-loaded — an mu-loader install runs
@@ -657,10 +680,23 @@ function force_2fa_dependency_notice() {
 			return;
 		}
 
+		$installed = file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE );
+
+		// Two Factor is loaded but the dependency is still unmet: its Email provider
+		// is unregistered, so activating it again is a no-op. Point to restoring the
+		// provider instead of offering a button that can't fix it.
+		if ( 'unusable' === force_2fa_dependency_state( $installed, class_exists( 'Two_Factor_Core' ) ) ) {
+			printf(
+				'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
+				esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA yet.', 'force-email-two-factor' ),
+				esc_html__( 'The Two Factor plugin is active, but its Email provider is not available, so email 2FA cannot be enforced. Restore the Email provider — it may have been removed by another plugin or a two_factor_providers filter.', 'force-email-two-factor' )
+			);
+			return;
+		}
+
 		// Only offer the one-click button when the user holds every capability its
 		// handler requires; otherwise inform without a button that would be denied.
 		if ( force_2fa_current_user_can_install_dependency( false ) ) {
-			$installed   = file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE );
 			$action      = 'force_2fa_install_two_factor';
 			$install_url = wp_nonce_url( admin_url( 'admin-post.php?action=' . $action ), $action );
 
@@ -688,10 +724,23 @@ function force_2fa_dependency_notice() {
 		return;
 	}
 
+	$installed = file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE );
+
+	// Same unusable case on a subsite: Two Factor is active here but its Email
+	// provider is gone, so "activate it" would be wrong.
+	if ( 'unusable' === force_2fa_dependency_state( $installed, class_exists( 'Two_Factor_Core' ) ) ) {
+		printf(
+			'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
+			esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA on this site.', 'force-email-two-factor' ),
+			esc_html__( 'The Two Factor plugin is active here, but its Email provider is not available, so email 2FA cannot be enforced on this site. Ask your network administrator to restore the Email provider.', 'force-email-two-factor' )
+		);
+		return;
+	}
+
 	printf(
 		'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
 		esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA on this site.', 'force-email-two-factor' ),
-		esc_html( force_2fa_dependency_heads_up_body( file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE ) ) )
+		esc_html( force_2fa_dependency_heads_up_body( $installed ) )
 	);
 }
 

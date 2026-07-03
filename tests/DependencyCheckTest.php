@@ -185,4 +185,19 @@ final class DependencyCheckTest extends TestCase {
 	public function test_heads_up_body_says_not_installed_when_absent(): void {
 		$this->assertStringContainsStringIgnoringCase( 'not installed', force_2fa_dependency_heads_up_body( false ) );
 	}
+
+	public function test_dependency_state_absent_when_not_installed(): void {
+		$this->assertSame( 'absent', force_2fa_dependency_state( false, false ) );
+	}
+
+	public function test_dependency_state_inactive_when_installed_but_not_loaded(): void {
+		$this->assertSame( 'inactive', force_2fa_dependency_state( true, false ) );
+	}
+
+	public function test_dependency_state_unusable_when_two_factor_loaded(): void {
+		// Two Factor is active (loaded) but the dependency is unmet — its Email
+		// provider is gone; activation won't help, whatever the on-disk state.
+		$this->assertSame( 'unusable', force_2fa_dependency_state( true, true ) );
+		$this->assertSame( 'unusable', force_2fa_dependency_state( false, true ) );
+	}
 }

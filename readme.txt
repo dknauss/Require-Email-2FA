@@ -194,7 +194,10 @@ challenge.
   installed, the button reads **Activate Two Factor** (or **Network-activate Two
   Factor** on multisite) and the copy says "installed but not active" rather than
   always offering to install it. The multisite per-site heads-up notice is likewise
-  accurate about installed-but-inactive versus not installed.
+  accurate about installed-but-inactive versus not installed. And when Two Factor is
+  active but its Email provider has been removed (e.g. via the `two_factor_providers`
+  filter), the notice says the provider must be restored instead of offering an
+  Activate button that would do nothing.
 
 = 1.10.0 =
 * Deployment: new `FORCE_2FA_DISABLE_SELF_UPDATE` constant (and
