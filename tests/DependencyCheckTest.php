@@ -11,9 +11,17 @@ use Force2FA\TestCase;
  */
 final class DependencyCheckTest extends TestCase {
 
-	public function test_dependency_met_is_true_when_provider_class_present(): void {
-		// The bootstrap defines Two_Factor_Email, mirroring an active Two Factor plugin.
+	public function test_dependency_met_is_true_when_email_provider_registered(): void {
+		// The stub's get_providers() includes Two_Factor_Email, mirroring an active
+		// Two Factor plugin with the Email provider registered.
 		$this->assertTrue( force_2fa_dependency_met() );
+	}
+
+	public function test_dependency_not_met_when_email_provider_unregistered(): void {
+		// Class present but another plugin removed Email from the provider registry:
+		// the injected provider could not resolve, so we must report the dep unmet.
+		$GLOBALS['__force2fa_providers'] = array( 'Two_Factor_Totp' => new \stdClass() );
+		$this->assertFalse( force_2fa_dependency_met() );
 	}
 
 	public function test_should_nag_when_missing_and_user_can_manage(): void {

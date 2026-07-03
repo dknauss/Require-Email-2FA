@@ -6,7 +6,7 @@
  * Description:      Requires the Two Factor plugin and makes emailed 2FA the default, required login factor for all users.
  * Author:           Pixel
  * Author URI:       https://wearepixel.ca
- * Version:          1.9.0
+ * Version:          1.9.1
  * Requires PHP:     7.2
  * License:          GPL-2.0-or-later
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
@@ -100,7 +100,7 @@ if ( defined( 'FORCE_2FA_DISABLE' ) && FORCE_2FA_DISABLE ) {
 if ( defined( 'FORCE_2FA_LOADED' ) ) {
 	return;
 }
-define( 'FORCE_2FA_LOADED', '1.9.0' );
+define( 'FORCE_2FA_LOADED', '1.9.1' );
 // @codeCoverageIgnoreEnd
 
 /**
@@ -112,17 +112,26 @@ define( 'FORCE_2FA_LOADED', '1.9.0' );
 const FORCE_2FA_TWO_FACTOR_PLUGIN_FILE = 'two-factor/two-factor.php';
 
 /**
- * Whether the Two Factor dependency is present and loaded.
+ * Whether the Two Factor dependency is present and usable.
  *
  * Single source of truth for "can we enforce?": the enforcement filter and the
- * admin nag both key off this. We probe the Email provider class specifically —
- * the exact symbol the enforcement filter appends — so a "met" result guarantees
- * the provider we inject can actually be resolved.
+ * admin nag both key off this. We confirm Two Factor actually *registers* the Email
+ * provider — via Two_Factor_Core::get_providers() — not merely that the class is
+ * loadable. That closes the edge case where another plugin removes Email from the
+ * 'two_factor_providers' registry: the class would still exist, but the provider we
+ * inject could not resolve, so enforcement would silently no-op. Requiring
+ * registration means a "met" result really does mean the injected provider is usable.
  *
- * @return bool True when the Two Factor plugin's Email provider is available.
+ * @return bool True when Two Factor registers the Email provider.
  */
 function force_2fa_dependency_met() {
-	return class_exists( 'Two_Factor_Email' );
+	if ( ! class_exists( 'Two_Factor_Core' ) || ! class_exists( 'Two_Factor_Email' ) ) {
+		return false;
+	}
+
+	$providers = Two_Factor_Core::get_providers();
+
+	return is_array( $providers ) && array_key_exists( 'Two_Factor_Email', $providers );
 }
 
 /**
@@ -476,18 +485,44 @@ function force_2fa_user_is_api_allowlisted( WP_User $user ) {
 }
 
 /**
+ * Record the user that authenticated via an Application Password this request.
+ *
+ * Hooked to 'application_password_did_authenticate', which passes the WP_User core
+ * just authenticated. force_2fa_filter_api_login_enable() compares this to the user
+ * it is asked about, so the API bypass is bound to the account that actually
+ * presented the Application Password — not merely "some app-password auth happened
+ * in this request".
+ *
+ * @param WP_User|mixed $user The user WordPress authenticated via Application Password.
+ */
+function force_2fa_note_app_password_user( $user ) {
+	$GLOBALS['force_2fa_app_password_user_id'] = ( $user instanceof WP_User ) ? (int) $user->ID : (int) $user;
+}
+
+/**
+ * The user ID that authenticated via an Application Password this request, or 0.
+ *
+ * @return int User ID, or 0 when no Application Password authenticated this request.
+ */
+function force_2fa_app_password_user_id() {
+	return isset( $GLOBALS['force_2fa_app_password_user_id'] ) ? (int) $GLOBALS['force_2fa_app_password_user_id'] : 0;
+}
+
+/**
  * Permit an API login to skip the second factor only when BOTH:
  *   (a) the user is an allowlisted service account, AND
- *   (b) this request authenticated via an Application Password.
+ *   (b) THIS user authenticated via an Application Password this request.
  *
- * Condition (b) reuses the exact signal the plugin itself uses as its default:
- * did_action('application_password_did_authenticate'). Our enforcement filter
- * runs at priority 31 on 'authenticate', after core's application-password
- * handler at priority 20, so this marker is reliably set by the time we run.
+ * Condition (b) is bound to the specific account via force_2fa_app_password_user_id()
+ * (captured from 'application_password_did_authenticate'), not the request-global
+ * did_action() signal Two Factor uses by default — so an app-password auth for some
+ * other account in the same request can't unlock the bypass for this one. Our filter
+ * runs at priority 31 on 'authenticate', after core's application-password handler at
+ * priority 20, so the user ID is recorded by the time we run.
  *
- * @param bool             $enable Plugin's default (true iff an app password was used).
+ * @param bool             $enable Ignored; the decision is recomputed here.
  * @param WP_User|int|null $user   The authenticating user (object or ID).
- * @return bool True only for an allowlisted account using an Application Password.
+ * @return bool True only for an allowlisted account that used an Application Password.
  */
 function force_2fa_filter_api_login_enable( $enable, $user ) {
 	unset( $enable ); // We recompute the decision from scratch below.
@@ -501,9 +536,11 @@ function force_2fa_filter_api_login_enable( $enable, $user ) {
 		return false; // Unknown user → deny the API bypass.
 	}
 
-	// (b) Require an Application Password for this request — a real-password
-	// API login never satisfies this, so leaked passwords can't be used here.
-	if ( ! did_action( 'application_password_did_authenticate' ) ) {
+	// (b) THIS user must have authenticated via an Application Password this request.
+	// A real-password API login never records a user, and an app-password auth for a
+	// different account does not count — so a leaked password can't be used here.
+	$app_password_user_id = force_2fa_app_password_user_id();
+	if ( 0 === $app_password_user_id || (int) $user->ID !== $app_password_user_id ) {
 		return false;
 	}
 
@@ -516,8 +553,32 @@ function force_2fa_filter_api_login_enable( $enable, $user ) {
 // fatally a unit run. Their behaviour is exercised by the Playground integration
 // test (a real activation with Two Factor absent), mirroring the load-time guards
 // above. The pure decisions they delegate to — force_2fa_should_nag() and
-// force_2fa_required_install_cap() — are unit-tested directly.
+// force_2fa_required_install_caps() — are unit-tested directly.
 // @codeCoverageIgnoreStart
+
+/**
+ * Whether the current user can complete the one-click dependency install/activate.
+ *
+ * Mirrors force_2fa_handle_install_two_factor(): the user must hold EVERY capability
+ * the situation requires — install_plugins when Two Factor is not on disk, plus the
+ * relevant activate capability. The notices use this to decide whether to render the
+ * action button, so a user who would only hit the handler's permission wall never
+ * sees a button that does nothing.
+ *
+ * @param bool $network Whether the dependency is resolved network-wide.
+ * @return bool True when the current user holds every required capability.
+ */
+function force_2fa_current_user_can_install_dependency( $network ) {
+	$installed = file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE );
+
+	foreach ( force_2fa_required_install_caps( $installed, $network ) as $required_cap ) {
+		if ( ! current_user_can( $required_cap ) ) {
+			return false;
+		}
+	}
+
+	return true;
+}
 
 /**
  * Per-site admin notice shown when Two Factor is not active.
@@ -537,18 +598,28 @@ function force_2fa_dependency_notice() {
 			return;
 		}
 
-		$action      = 'force_2fa_install_two_factor';
-		$install_url = wp_nonce_url( admin_url( 'admin-post.php?action=' . $action ), $action );
+		// Only offer the one-click button when the user holds every capability its
+		// handler requires; otherwise inform without a button that would be denied.
+		if ( force_2fa_current_user_can_install_dependency( false ) ) {
+			$action      = 'force_2fa_install_two_factor';
+			$install_url = wp_nonce_url( admin_url( 'admin-post.php?action=' . $action ), $action );
 
-		printf(
-			'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p><a href="%3$s" class="button button-primary">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
-			esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA yet.', 'force-email-two-factor' ),
-			esc_html__( 'It needs the Two Factor plugin to be installed and active. Until then, 2FA is not enforced for any user.', 'force-email-two-factor' ),
-			esc_url( $install_url ),
-			esc_html__( 'Install &amp; activate Two Factor', 'force-email-two-factor' ),
-			esc_url( 'https://wordpress.org/plugins/two-factor/' ),
-			esc_html__( 'Learn more', 'force-email-two-factor' )
-		);
+			printf(
+				'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p><a href="%3$s" class="button button-primary">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
+				esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA yet.', 'force-email-two-factor' ),
+				esc_html__( 'It needs the Two Factor plugin to be installed and active. Until then, 2FA is not enforced for any user.', 'force-email-two-factor' ),
+				esc_url( $install_url ),
+				esc_html__( 'Install &amp; activate Two Factor', 'force-email-two-factor' ),
+				esc_url( 'https://wordpress.org/plugins/two-factor/' ),
+				esc_html__( 'Learn more', 'force-email-two-factor' )
+			);
+		} else {
+			printf(
+				'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
+				esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA yet.', 'force-email-two-factor' ),
+				esc_html__( 'It needs the Two Factor plugin installed and active. Ask an administrator who can install and activate plugins to add Two Factor. Until then, 2FA is not enforced for any user.', 'force-email-two-factor' )
+			);
+		}
 		return;
 	}
 
@@ -615,18 +686,28 @@ function force_2fa_network_dependency_notice() {
 		return;
 	}
 
-	$action      = 'force_2fa_install_two_factor';
-	$install_url = wp_nonce_url( admin_url( 'admin-post.php?action=' . $action ), $action );
+	// Only offer the one-click button when the user holds every capability its
+	// handler requires; otherwise inform without a button that would be denied.
+	if ( force_2fa_current_user_can_install_dependency( true ) ) {
+		$action      = 'force_2fa_install_two_factor';
+		$install_url = wp_nonce_url( admin_url( 'admin-post.php?action=' . $action ), $action );
 
-	printf(
-		'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p><a href="%3$s" class="button button-primary">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
-		esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA network-wide.', 'force-email-two-factor' ),
-		esc_html__( 'It is network-active, but the Two Factor plugin is not — so 2FA is not enforced on sites where Two Factor is inactive. Install and network-activate Two Factor to close the gap.', 'force-email-two-factor' ),
-		esc_url( $install_url ),
-		esc_html__( 'Install &amp; network-activate Two Factor', 'force-email-two-factor' ),
-		esc_url( 'https://wordpress.org/plugins/two-factor/' ),
-		esc_html__( 'Learn more', 'force-email-two-factor' )
-	);
+		printf(
+			'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p><a href="%3$s" class="button button-primary">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
+			esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA network-wide.', 'force-email-two-factor' ),
+			esc_html__( 'It is network-active, but the Two Factor plugin is not — so 2FA is not enforced on sites where Two Factor is inactive. Install and network-activate Two Factor to close the gap.', 'force-email-two-factor' ),
+			esc_url( $install_url ),
+			esc_html__( 'Install &amp; network-activate Two Factor', 'force-email-two-factor' ),
+			esc_url( 'https://wordpress.org/plugins/two-factor/' ),
+			esc_html__( 'Learn more', 'force-email-two-factor' )
+		);
+	} else {
+		printf(
+			'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
+			esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA network-wide.', 'force-email-two-factor' ),
+			esc_html__( 'It is network-active, but the Two Factor plugin is not. Ask an administrator who can install and network-activate plugins to add Two Factor so 2FA is enforced on every site.', 'force-email-two-factor' )
+		);
+	}
 }
 
 /**
@@ -835,9 +916,13 @@ function force_2fa_bootstrap_self_update() {
 	);
 
 	// Follow published Releases and download the versioned "<slug>.zip" asset built
-	// by the release workflow — not GitHub's auto-generated source archive, which
-	// omits vendor/ (and therefore PUC itself on the next update).
-	$update_checker->getVcsApi()->enableReleaseAssets( '/' . preg_quote( $slug, '/' ) . '\.zip$/i' );
+	// by the release workflow. REQUIRE (not merely prefer) that asset: a release
+	// without it offers no update at all, rather than falling back to GitHub's
+	// source archive — which unzips to a differently-named folder and omits vendor/
+	// (and so PUC itself on the next update). This keeps the reviewed release asset
+	// as the only update payload, which is the documented trust boundary.
+	$vcs_api = $update_checker->getVcsApi();
+	$vcs_api->enableReleaseAssets( '/' . preg_quote( $slug, '/' ) . '\.zip$/i', $vcs_api::REQUIRE_RELEASE_ASSETS );
 	// @codeCoverageIgnoreEnd
 }
 
@@ -850,6 +935,10 @@ function force_2fa_bootstrap_self_update() {
 function force_2fa_register_hooks() {
 	add_filter( 'two_factor_enabled_providers_for_user', 'force_2fa_filter_enabled_providers', 10, 2 );
 	add_filter( 'two_factor_user_api_login_enable', 'force_2fa_filter_api_login_enable', 10, 2 );
+
+	// Bind the API-login app-password check to the account that authenticated (see
+	// force_2fa_filter_api_login_enable): record the user on each app-password auth.
+	add_action( 'application_password_did_authenticate', 'force_2fa_note_app_password_user', 10, 1 );
 
 	// Soft-dependency UX: nag + one-click installer when Two Factor is absent.
 	// Per-site notice (single-site actionable / multisite heads-up) and the

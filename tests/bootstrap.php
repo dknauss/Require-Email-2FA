@@ -88,6 +88,15 @@ if ( ! class_exists( 'Two_Factor_Email' ) ) {
 // the test exercises real enforcement behaviour, not a reimplementation of it.
 if ( ! class_exists( 'Two_Factor_Core' ) ) {
 	class Two_Factor_Core {
+		/**
+		 * Registered providers, keyed by class name. Defaults to Email present (the
+		 * normal state); a test can set $GLOBALS['__force2fa_providers'] to simulate
+		 * another plugin unregistering Email.
+		 */
+		public static function get_providers() {
+			return $GLOBALS['__force2fa_providers'] ?? array( 'Two_Factor_Email' => new Two_Factor_Email() );
+		}
+
 		public static function get_enabled_providers_for_user( $user_id, array $stored = array() ) {
 			return force_2fa_filter_enabled_providers( $stored, $user_id );
 		}

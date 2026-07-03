@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.9.0
+Stable tag: 1.9.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -172,7 +172,34 @@ challenge.
 
 == Changelog ==
 
+= 1.9.1 =
+* Updater: **require** the release asset. The self-updater now installs only the
+  reviewed `force-email-two-factor.zip` and never falls back to GitHub's source
+  archive, so a release missing that asset offers no update instead of installing
+  a wrongly-structured one (`REQUIRE_RELEASE_ASSETS`).
+* Security: bind the API-login Application Password check to the authenticating
+  account. The bypass now requires that *this* user presented an Application
+  Password this request, not merely that some app-password authentication happened.
+* Enforcement: treat the dependency as met only when Two Factor actually registers
+  the Email provider (checks `Two_Factor_Core::get_providers()`), not merely that
+  the class exists — so a removed-Email edge case is reported instead of silently
+  no-enforcing.
+* Admin UX: the dependency notices show the one-click install button only when the
+  current user holds every capability its handler needs; otherwise they inform
+  without an action that would be denied.
+* Release workflow: run the PHPCS + PHPUnit gate against the tagged commit before
+  building and publishing the update asset.
+* Self-updates from a git working copy are skipped (a `.git` present), so a dev
+  clone is not overwritten by a release zip.
+
 = 1.9.0 =
+* Self-hosted updates: the plugin updates itself from its GitHub Releases (via the
+  bundled Plugin Update Checker) rather than WordPress.org. The `Update URI` header
+  is the source of truth and stops a same-named .org plugin from serving updates.
+* The updater is vendored (committed) and installs a reviewed `force-email-two-factor.zip`
+  release asset built by a tag-triggered workflow; workflow Actions are pinned to
+  commit SHAs.
+* Docs: add an FAQ explaining expired email 2FA codes.
 * Multisite: the plugin is now **network-only**. A per-site activation is refused
   by an activation-hook guard (rolled back with a "must be Network Activated"
   notice, covering the admin UI and WP-CLI / programmatic paths), so enforcement
