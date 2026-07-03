@@ -6,7 +6,7 @@
  * Description:      Requires the Two Factor plugin and makes emailed 2FA the default, required login factor for all users.
  * Author:           Pixel
  * Author URI:       https://wearepixel.ca
- * Version:          1.10.0
+ * Version:          1.10.1
  * Requires PHP:     7.2
  * License:          GPL-2.0-or-later
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
@@ -109,7 +109,7 @@ if ( defined( 'FORCE_2FA_DISABLE' ) && FORCE_2FA_DISABLE ) {
 if ( defined( 'FORCE_2FA_LOADED' ) ) {
 	return;
 }
-define( 'FORCE_2FA_LOADED', '1.10.0' );
+define( 'FORCE_2FA_LOADED', '1.10.1' );
 // @codeCoverageIgnoreEnd
 
 /**
@@ -196,6 +196,51 @@ function force_2fa_required_install_caps( $already_installed, $network = false )
 	}
 	$caps[] = $network ? 'manage_network_plugins' : 'activate_plugins';
 	return $caps;
+}
+
+/**
+ * Button label for the dependency notice's one-click action, by state.
+ *
+ * The action installs Two Factor only when it is not already on disk; when it is
+ * present-but-inactive the action just activates it — so the label says "Activate"
+ * rather than always "Install & activate". Pure decision, unit-tested; the notice
+ * glue renders it (see force_2fa_dependency_notice / _network_dependency_notice).
+ *
+ * @param bool $installed Whether two-factor/two-factor.php is present on disk.
+ * @param bool $network   Whether this is the network-wide (multisite) action.
+ * @return string Translated button label.
+ */
+function force_2fa_dependency_action_label( $installed, $network ) {
+	if ( $network ) {
+		return $installed
+			? __( 'Network-activate Two Factor', 'force-email-two-factor' )
+			: __( 'Install & network-activate Two Factor', 'force-email-two-factor' );
+	}
+	return $installed
+		? __( 'Activate Two Factor', 'force-email-two-factor' )
+		: __( 'Install & activate Two Factor', 'force-email-two-factor' );
+}
+
+/**
+ * Body copy for the actionable dependency notice, by state.
+ *
+ * Mirrors force_2fa_dependency_action_label(): when Two Factor is present but
+ * inactive the copy says so and asks to activate it, instead of telling the admin
+ * to install a plugin that is already there. Pure decision, unit-tested.
+ *
+ * @param bool $installed Whether two-factor/two-factor.php is present on disk.
+ * @param bool $network   Whether this is the network-wide (multisite) action.
+ * @return string Translated body sentence(s).
+ */
+function force_2fa_dependency_action_body( $installed, $network ) {
+	if ( $network ) {
+		return $installed
+			? __( 'It is network-active, but the Two Factor plugin is installed but not network-active — so 2FA is not enforced on sites where Two Factor is inactive. Network-activate Two Factor to close the gap.', 'force-email-two-factor' )
+			: __( 'It is network-active, but the Two Factor plugin is not — so 2FA is not enforced on sites where Two Factor is inactive. Install and network-activate Two Factor to close the gap.', 'force-email-two-factor' );
+	}
+	return $installed
+		? __( 'The Two Factor plugin is installed but not active. Activate it to start enforcing 2FA for all users.', 'force-email-two-factor' )
+		: __( 'It needs the Two Factor plugin to be installed and active. Until then, 2FA is not enforced for any user.', 'force-email-two-factor' );
 }
 
 /**
@@ -598,15 +643,16 @@ function force_2fa_dependency_notice() {
 		// Only offer the one-click button when the user holds every capability its
 		// handler requires; otherwise inform without a button that would be denied.
 		if ( force_2fa_current_user_can_install_dependency( false ) ) {
+			$installed   = file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE );
 			$action      = 'force_2fa_install_two_factor';
 			$install_url = wp_nonce_url( admin_url( 'admin-post.php?action=' . $action ), $action );
 
 			printf(
 				'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p><a href="%3$s" class="button button-primary">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
 				esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA yet.', 'force-email-two-factor' ),
-				esc_html__( 'It needs the Two Factor plugin to be installed and active. Until then, 2FA is not enforced for any user.', 'force-email-two-factor' ),
+				esc_html( force_2fa_dependency_action_body( $installed, false ) ),
 				esc_url( $install_url ),
-				esc_html__( 'Install & activate Two Factor', 'force-email-two-factor' ),
+				esc_html( force_2fa_dependency_action_label( $installed, false ) ),
 				esc_url( 'https://wordpress.org/plugins/two-factor/' ),
 				esc_html__( 'Learn more', 'force-email-two-factor' )
 			);
@@ -686,15 +732,16 @@ function force_2fa_network_dependency_notice() {
 	// Only offer the one-click button when the user holds every capability its
 	// handler requires; otherwise inform without a button that would be denied.
 	if ( force_2fa_current_user_can_install_dependency( true ) ) {
+		$installed   = file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE );
 		$action      = 'force_2fa_install_two_factor';
 		$install_url = wp_nonce_url( admin_url( 'admin-post.php?action=' . $action ), $action );
 
 		printf(
 			'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p><a href="%3$s" class="button button-primary">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
 			esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA network-wide.', 'force-email-two-factor' ),
-			esc_html__( 'It is network-active, but the Two Factor plugin is not — so 2FA is not enforced on sites where Two Factor is inactive. Install and network-activate Two Factor to close the gap.', 'force-email-two-factor' ),
+			esc_html( force_2fa_dependency_action_body( $installed, true ) ),
 			esc_url( $install_url ),
-			esc_html__( 'Install & network-activate Two Factor', 'force-email-two-factor' ),
+			esc_html( force_2fa_dependency_action_label( $installed, true ) ),
 			esc_url( 'https://wordpress.org/plugins/two-factor/' ),
 			esc_html__( 'Learn more', 'force-email-two-factor' )
 		);

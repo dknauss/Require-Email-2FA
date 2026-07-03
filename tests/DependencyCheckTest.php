@@ -144,4 +144,37 @@ final class DependencyCheckTest extends TestCase {
 		$this->assertFalse( force_2fa_activation_blocked( false, false ) );
 		$this->assertFalse( force_2fa_activation_blocked( false, true ) );
 	}
+
+	// --- Dependency notice copy responds to installed-vs-inactive ---
+
+	public function test_action_label_install_and_activate_when_absent_single_site(): void {
+		$this->assertSame( 'Install & activate Two Factor', force_2fa_dependency_action_label( false, false ) );
+	}
+
+	public function test_action_label_activate_only_when_installed_single_site(): void {
+		$this->assertSame( 'Activate Two Factor', force_2fa_dependency_action_label( true, false ) );
+	}
+
+	public function test_action_label_install_and_network_activate_when_absent(): void {
+		$this->assertSame( 'Install & network-activate Two Factor', force_2fa_dependency_action_label( false, true ) );
+	}
+
+	public function test_action_label_network_activate_only_when_installed(): void {
+		$this->assertSame( 'Network-activate Two Factor', force_2fa_dependency_action_label( true, true ) );
+	}
+
+	public function test_action_body_prompts_install_when_absent(): void {
+		$this->assertStringContainsStringIgnoringCase( 'installed and active', force_2fa_dependency_action_body( false, false ) );
+		$this->assertStringContainsStringIgnoringCase( 'install and network-activate', force_2fa_dependency_action_body( false, true ) );
+	}
+
+	public function test_action_body_prompts_activate_only_when_installed(): void {
+		// Installed-but-inactive: say it's installed and to activate it, not to install it.
+		$single = force_2fa_dependency_action_body( true, false );
+		$this->assertStringContainsStringIgnoringCase( 'installed but not active', $single );
+
+		$network = force_2fa_dependency_action_body( true, true );
+		$this->assertStringContainsStringIgnoringCase( 'not network-active', $network );
+		$this->assertStringNotContainsStringIgnoringCase( 'install and network-activate', $network );
+	}
 }

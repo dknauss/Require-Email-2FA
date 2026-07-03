@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.10.0
+Stable tag: 1.10.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -187,6 +187,13 @@ only allowlisted accounts using Application Passwords can skip the interactive
 challenge.
 
 == Changelog ==
+
+= 1.10.1 =
+* Admin UX: the dependency notice and its one-click button now reflect whether the
+  Two Factor plugin is missing versus installed-but-inactive. When it is already
+  installed, the button reads **Activate Two Factor** (or **Network-activate Two
+  Factor** on multisite) and the copy says "installed but not active" rather than
+  always offering to install it.
 
 = 1.10.0 =
 * Deployment: new `FORCE_2FA_DISABLE_SELF_UPDATE` constant (and
