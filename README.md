@@ -252,17 +252,21 @@ The plugin checks this constant at load time and registers nothing when it's set
   unconditionally and needs no per-user setup, so it becomes an available — and
   for unconfigured users, the primary — provider. That makes
   `Two_Factor_Core::is_user_using_two_factor()` true, which triggers the login
-  challenge. A `class_exists( 'Two_Factor_Email' )` guard means the filter
-  no-ops safely (never stripping an existing factor) if the Two Factor plugin is
-  inactive.
+  challenge. A `force_2fa_dependency_met()` guard — Two Factor loaded **and** the
+  Email provider registered in `Two_Factor_Core::get_providers()` — means the
+  filter no-ops safely (never stripping an existing factor) if Two Factor is
+  inactive, and does not append a provider Two Factor can't resolve.
 
 - **API logins:** filters `two_factor_user_api_login_enable`. The plugin's own
   default for this filter is `did_action( 'application_password_did_authenticate' )`,
   i.e. it already allows API logins without 2FA only via Application Passwords.
-  This plugin recomputes the decision as *(app password used) AND (user is
-  allowlisted)*. The enforcement runs at priority 31 on `authenticate`, after
-  core's application-password handler at priority 20, so the app-password marker
-  is reliably set by the time the decision is made.
+  This plugin recomputes the decision as *(this account used an Application
+  Password this request) AND (user is allowlisted)*. The account is captured on
+  `application_password_did_authenticate` — fired by core while authenticating the
+  request — and Two Factor evaluates `two_factor_user_api_login_enable` afterward,
+  during its API-login gating, so the marker is reliably set by the time the
+  decision is made. (Both hooks use the default priority 10; the ordering comes
+  from the authentication → API-login-gating stages, not from priorities.)
 
 - **Self-hosted updates (no WordPress.org, no collisions):** distributed from
   GitHub, so `force_2fa_bootstrap_self_update()` registers
@@ -338,10 +342,11 @@ does nothing else.
 - **Users with no 2FA yet:** email enforcement applies at their next login.
 
 - **Two Factor not active:** this plugin still activates, but the runtime
-  `force_2fa_dependency_met()` guard (a `class_exists( 'Two_Factor_Email' )` check)
-  makes it a **safe no-op** — no errors, no enforcement — and an admin notice warns
-  that 2FA is not being enforced, with a one-click button to install/activate Two
-  Factor. The same guard covers the case where Two Factor is disabled later.
+  `force_2fa_dependency_met()` guard (Two Factor loaded **and** the Email provider
+  registered in `Two_Factor_Core::get_providers()`) makes it a **safe no-op** — no
+  errors, no enforcement — and an admin notice warns that 2FA is not being enforced,
+  with a one-click button to install/activate Two Factor. The same guard covers the
+  case where Two Factor is disabled later.
 
 - **A different 2FA plugin** (Wordfence Login Security, WP 2FA, miniOrange, Duo,
   etc.): this plugin **does not integrate with or affect them** — they don't expose
@@ -353,7 +358,7 @@ does nothing else.
 > **Don't run two 2FA enforcement stacks at once.** If both Two Factor (with this plugin) and a separate 2FA plugin gate the login flow, you risk double prompts or lockouts. Pick one stack; this plugin assumes that stack is Two Factor.
 
 > [!NOTE]
-> **Edge case:** if an admin has deliberately unregistered the Email provider via the `two_factor_providers` filter, the provider class still exists, so email is still appended — but Two Factor won't resolve it as a usable factor, so email enforcement won't actually take effect.
+> **Edge case:** if an admin has deliberately unregistered the Email provider via the `two_factor_providers` filter, `force_2fa_dependency_met()` reports the dependency as unmet (it checks `Two_Factor_Core::get_providers()`, not just that the class exists), so this plugin does **not** append Email — it would be unusable — and enforcement safely no-ops rather than injecting a provider Two Factor can't resolve.
 
 ---
 

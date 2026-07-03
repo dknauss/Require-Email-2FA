@@ -517,9 +517,13 @@ function force_2fa_app_password_user_id() {
  * Condition (b) is bound to the specific account via force_2fa_app_password_user_id()
  * (captured from 'application_password_did_authenticate'), not the request-global
  * did_action() signal Two Factor uses by default — so an app-password auth for some
- * other account in the same request can't unlock the bypass for this one. Our filter
- * runs at priority 31 on 'authenticate', after core's application-password handler at
- * priority 20, so the user ID is recorded by the time we run.
+ * other account in the same request can't unlock the bypass for this one. The
+ * capture runs on 'application_password_did_authenticate', which core fires while
+ * authenticating the request; Two Factor evaluates 'two_factor_user_api_login_enable'
+ * afterward, during its API-login gating — so the authenticating user's ID is already
+ * recorded by the time this filter runs. Both hooks are registered at the default
+ * priority 10 (see force_2fa_register_hooks); the ordering comes from the stages
+ * (authentication before API-login gating), not from priorities.
  *
  * @param bool             $enable Ignored; the decision is recomputed here.
  * @param WP_User|int|null $user   The authenticating user (object or ID).
