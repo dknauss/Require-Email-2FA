@@ -328,6 +328,11 @@ does nothing else.
 - **Mail delivery is part of the security boundary.** If outbound email fails,
   users without a stronger factor can be locked out until mail is fixed or
   `FORCE_2FA_DISABLE` is enabled.
+- **Email passcodes expire.** Two Factor email codes are valid for 15 minutes by
+  default. An expired code is rejected like any invalid code; the user should use
+  **Resend Code** or restart the login to generate a fresh email code. Repeated
+  invalid attempts are handled by the Two Factor plugin's rate limiting and
+  failed-attempt protections.
 - **Only the Two Factor plugin is enforced.** Other 2FA plugins are not affected,
   and they do not satisfy the Two Factor dependency this plugin needs.
 - **Multisite is network-only, and depends on Two Factor being network-active.**

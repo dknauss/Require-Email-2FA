@@ -107,6 +107,13 @@ Add `define( 'FORCE_2FA_DISABLE', true );` to `wp-config.php`. The plugin checks
 this at load time and registers nothing while it is set. Remove the line to
 re-enable enforcement.
 
+= What if an email code times out? =
+
+Two Factor email codes are valid for 15 minutes by default. An expired code is
+rejected like any invalid code; use **Resend Code** or restart login to generate
+a fresh email code. Repeated invalid attempts are handled by the Two Factor
+plugin's rate limiting and failed-attempt protections.
+
 = How do I exempt a role from forced 2FA? =
 
 List the role slugs (lowercase keys such as `subscriber`, not display names) in
