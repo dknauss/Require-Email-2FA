@@ -1,6 +1,8 @@
 # Keep generated GitHub source archives focused on the installable plugin.
 .github/ export-ignore
 tests/ export-ignore
+bin/ export-ignore
+playground/ export-ignore
 .gitignore export-ignore
 .gitattributes export-ignore
 composer.json export-ignore
