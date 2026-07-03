@@ -144,24 +144,4 @@ final class DependencyCheckTest extends TestCase {
 		$this->assertFalse( force_2fa_activation_blocked( false, false ) );
 		$this->assertFalse( force_2fa_activation_blocked( false, true ) );
 	}
-
-	public function test_warn_legacy_per_site_when_active_only_per_site_on_multisite(): void {
-		// Upgraded install that was activated per-site before 1.9.0: warn the super
-		// admin so they migrate to network activation.
-		$this->assertTrue( force_2fa_should_warn_legacy_per_site( true, true, true ) );
-	}
-
-	public function test_no_legacy_warning_when_not_multisite(): void {
-		$this->assertFalse( force_2fa_should_warn_legacy_per_site( false, true, true ) );
-	}
-
-	public function test_no_legacy_warning_when_network_active(): void {
-		// Not "only per-site" (it's network-active) → nothing to migrate.
-		$this->assertFalse( force_2fa_should_warn_legacy_per_site( true, false, true ) );
-	}
-
-	public function test_no_legacy_warning_when_user_cannot_manage_network(): void {
-		// Only a super admin can migrate it, so only they see the actionable warning.
-		$this->assertFalse( force_2fa_should_warn_legacy_per_site( true, true, false ) );
-	}
 }

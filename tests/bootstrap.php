@@ -58,6 +58,12 @@ function did_action( $hook ) {
 	return $GLOBALS['__force2fa_did_action'][ $hook ] ?? 0;
 }
 
+// i18n: return the string unchanged. Enough for the pure functions that build
+// translatable labels (e.g. the Site Health test registration).
+function __( $text, $domain = 'default' ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress core stub.
+	return $text;
+}
+
 // --- WordPress class stubs ----------------------------------------------------
 
 if ( ! class_exists( 'WP_User' ) ) {

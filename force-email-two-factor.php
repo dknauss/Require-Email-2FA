@@ -6,7 +6,7 @@
  * Description:      Requires the Two Factor plugin and makes emailed 2FA the default, required login factor for all users.
  * Author:           Pixel
  * Author URI:       https://wearepixel.ca
- * Version:          1.9.1
+ * Version:          1.10.0
  * Requires PHP:     7.2
  * License:          GPL-2.0-or-later
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
@@ -65,6 +65,15 @@
  * Everything else (slug, download asset) derives from the plugin folder name; only
  * a rename also needs the release workflow's PLUGIN_SLUG updated to match.
  *
+ * TO DISABLE self-update (e.g. sites patched by a central manager such as MainWP,
+ * Composer, or git deploys) add to wp-config.php:
+ *
+ *     define( 'FORCE_2FA_DISABLE_SELF_UPDATE', true );
+ *
+ * The plugin then never polls GitHub or self-installs; your pipeline delivers
+ * updates. Enforcement is unchanged. See docs/DEPLOYMENT.md for the managed vs.
+ * standalone deployment guide.
+ *
  * ---------------------------------------------------------------------------
  * EMERGENCY KILL SWITCH
  * ---------------------------------------------------------------------------
@@ -100,7 +109,7 @@ if ( defined( 'FORCE_2FA_DISABLE' ) && FORCE_2FA_DISABLE ) {
 if ( defined( 'FORCE_2FA_LOADED' ) ) {
 	return;
 }
-define( 'FORCE_2FA_LOADED', '1.9.1' );
+define( 'FORCE_2FA_LOADED', '1.10.0' );
 // @codeCoverageIgnoreEnd
 
 /**
@@ -221,23 +230,6 @@ function force_2fa_is_effectively_network_wide( $is_multisite, $network_active, 
  */
 function force_2fa_activation_blocked( $is_multisite, $network_wide ) {
 	return (bool) $is_multisite && ! $network_wide;
-}
-
-/**
- * Whether to warn about a legacy per-site activation on multisite.
- *
- * The activation guard only blocks NEW per-site activations; an install that was
- * already active per-site before 1.9.0 keeps running in that weaker mode after the
- * update. This surfaces it so a super admin can migrate it to network activation.
- * Pure decision, unit-tested; force_2fa_legacy_activation_notice() is the glue.
- *
- * @param bool $is_multisite            Whether this is a multisite network.
- * @param bool $active_only_per_site    Active in the site option but NOT network-active.
- * @param bool $user_can_manage_network Whether the user can manage network plugins.
- * @return bool True if the migration warning should render.
- */
-function force_2fa_should_warn_legacy_per_site( $is_multisite, $active_only_per_site, $user_can_manage_network ) {
-	return (bool) $is_multisite && (bool) $active_only_per_site && (bool) $user_can_manage_network;
 }
 
 /**
@@ -364,8 +356,9 @@ function force_2fa_user_is_exempt( WP_User $user ) {
  */
 function force_2fa_filter_enabled_providers( $enabled_providers, $user_id ) {
 	// Plugin gone / provider unregistered: do not touch the list. (Defensive guard
-	// for when the Two Factor plugin is absent; unit tests always have the provider
-	// class present, so this safety branch stays uncovered by design.)
+	// for when the Two Factor plugin is absent or has had the Email provider
+	// unregistered; covered by EnabledProvidersFilterTest via the __force2fa_providers
+	// stub.)
 	if ( ! force_2fa_dependency_met() ) {
 		return $enabled_providers;
 	}
@@ -516,9 +509,13 @@ function force_2fa_app_password_user_id() {
  * Condition (b) is bound to the specific account via force_2fa_app_password_user_id()
  * (captured from 'application_password_did_authenticate'), not the request-global
  * did_action() signal Two Factor uses by default — so an app-password auth for some
- * other account in the same request can't unlock the bypass for this one. Our filter
- * runs at priority 31 on 'authenticate', after core's application-password handler at
- * priority 20, so the user ID is recorded by the time we run.
+ * other account in the same request can't unlock the bypass for this one. The
+ * capture runs on 'application_password_did_authenticate', which core fires while
+ * authenticating the request; Two Factor evaluates 'two_factor_user_api_login_enable'
+ * afterward, during its API-login gating — so the authenticating user's ID is already
+ * recorded by the time this filter runs. Both hooks are registered at the default
+ * priority 10 (see force_2fa_register_hooks); the ordering comes from the stages
+ * (authentication before API-login gating), not from priorities.
  *
  * @param bool             $enable Ignored; the decision is recomputed here.
  * @param WP_User|int|null $user   The authenticating user (object or ID).
@@ -609,7 +606,7 @@ function force_2fa_dependency_notice() {
 				esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA yet.', 'force-email-two-factor' ),
 				esc_html__( 'It needs the Two Factor plugin to be installed and active. Until then, 2FA is not enforced for any user.', 'force-email-two-factor' ),
 				esc_url( $install_url ),
-				esc_html__( 'Install &amp; activate Two Factor', 'force-email-two-factor' ),
+				esc_html__( 'Install & activate Two Factor', 'force-email-two-factor' ),
 				esc_url( 'https://wordpress.org/plugins/two-factor/' ),
 				esc_html__( 'Learn more', 'force-email-two-factor' )
 			);
@@ -697,7 +694,7 @@ function force_2fa_network_dependency_notice() {
 			esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA network-wide.', 'force-email-two-factor' ),
 			esc_html__( 'It is network-active, but the Two Factor plugin is not — so 2FA is not enforced on sites where Two Factor is inactive. Install and network-activate Two Factor to close the gap.', 'force-email-two-factor' ),
 			esc_url( $install_url ),
-			esc_html__( 'Install &amp; network-activate Two Factor', 'force-email-two-factor' ),
+			esc_html__( 'Install & network-activate Two Factor', 'force-email-two-factor' ),
 			esc_url( 'https://wordpress.org/plugins/two-factor/' ),
 			esc_html__( 'Learn more', 'force-email-two-factor' )
 		);
@@ -740,48 +737,6 @@ function force_2fa_block_single_site_activation( $network_wide ) {
 		esc_html__( 'Require Email 2FA is network-only on multisite. Please Network Activate it from Network Admin → Plugins instead of activating it on a single site.', 'force-email-two-factor' ),
 		esc_html__( 'Network activation required', 'force-email-two-factor' ),
 		array( 'back_link' => true )
-	);
-}
-
-/**
- * Whether this plugin is active in the current site's option but NOT network-active.
- *
- * Distinguishes a legacy per-site activation from a network activation and from an
- * mu-loaded install (which is in neither option). Used only to warn about the
- * pre-1.9.0 per-site mode.
- *
- * @return bool
- */
-function force_2fa_active_only_per_site() {
-	if ( ! function_exists( 'is_plugin_active' ) ) {
-		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-	}
-	$self = plugin_basename( __FILE__ );
-	return is_multisite()
-		&& in_array( $self, (array) get_option( 'active_plugins', array() ), true )
-		&& ! is_plugin_active_for_network( $self );
-}
-
-/**
- * Notice: this plugin is active per-site on multisite (legacy mode).
- *
- * Shown to super admins only (they alone can migrate it). The activation guard
- * blocks NEW per-site activations, but an install that predates 1.9.0 keeps
- * running per-site until deactivated — this nudges the admin to Network Activate.
- */
-function force_2fa_legacy_activation_notice() {
-	if ( ! force_2fa_should_warn_legacy_per_site(
-		is_multisite(),
-		force_2fa_active_only_per_site(),
-		current_user_can( 'manage_network_plugins' )
-	) ) {
-		return;
-	}
-
-	printf(
-		'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
-		esc_html__( 'Require Email 2FA is active on this site only.', 'force-email-two-factor' ),
-		esc_html__( 'On multisite it should be Network Activated so enforcement can\'t be skipped via a site where it is inactive. Deactivate it here and Network Activate it from Network Admin → Plugins.', 'force-email-two-factor' )
 	);
 }
 
@@ -867,6 +822,130 @@ function force_2fa_update_checker( $checker = null ) {
 }
 
 /**
+ * Whether this plugin's self-updater should run.
+ *
+ * Defaults to enabled. Turn it OFF on sites whose plugin updates are delivered by a
+ * central management layer (MainWP, Composer, git-based deploys) so each site does
+ * not independently poll GitHub and self-install releases — updates then flow only
+ * through your controlled pipeline. In wp-config.php:
+ *
+ *     define( 'FORCE_2FA_DISABLE_SELF_UPDATE', true );
+ *
+ * or via the 'force_2fa_self_update_enabled' filter (also how tests inject it).
+ * Disabling self-update does NOT weaken 2FA enforcement — every enforcement guard
+ * is independent of the updater; it only changes how this plugin's own code updates.
+ *
+ * @return bool
+ */
+function force_2fa_self_update_enabled() {
+	$enabled = ! ( defined( 'FORCE_2FA_DISABLE_SELF_UPDATE' ) && FORCE_2FA_DISABLE_SELF_UPDATE );
+
+	/**
+	 * Filter whether the self-updater runs.
+	 *
+	 * @param bool $enabled Whether self-update is enabled (default true, unless the
+	 *                      FORCE_2FA_DISABLE_SELF_UPDATE constant is truthy).
+	 */
+	return (bool) apply_filters( 'force_2fa_self_update_enabled', $enabled );
+}
+
+/**
+ * Classify the self-update posture, for diagnostics (the Site Health check).
+ *
+ * Mirrors the order of the guards in force_2fa_bootstrap_self_update() so the
+ * reported reason matches why the updater actually did or didn't wire up. Pure
+ * decision, unit-tested; force_2fa_site_health_self_update() supplies the inputs.
+ *
+ * @param bool $enabled        Result of force_2fa_self_update_enabled().
+ * @param bool $has_vcs        Whether a .git entry is present (a working copy).
+ * @param bool $puc_readable   Whether the vendored Plugin Update Checker is readable.
+ * @param bool $has_update_uri Whether the Update URI header is non-empty.
+ * @return string One of: active, disabled_config, disabled_vcs, unavailable_no_puc,
+ *                disabled_no_update_uri.
+ */
+function force_2fa_self_update_status( $enabled, $has_vcs, $puc_readable, $has_update_uri ) {
+	if ( ! $enabled ) {
+		return 'disabled_config';
+	}
+	if ( $has_vcs ) {
+		return 'disabled_vcs';
+	}
+	if ( ! $puc_readable ) {
+		return 'unavailable_no_puc';
+	}
+	if ( ! $has_update_uri ) {
+		return 'disabled_no_update_uri';
+	}
+	return 'active';
+}
+
+/**
+ * Map a self-update status to its Site Health severity and label.
+ *
+ * Intended states (updating, or a deliberate opt-out) are "good"; likely-unintended
+ * ones (a working-copy .git on production, missing updater files, a blank Update
+ * URI) are "recommended". Pure decision, unit-tested — keeping the classification
+ * out of the disk-reading glue is what guards against, e.g., a disabled site being
+ * labelled "receiving updates".
+ *
+ * @param string $status A force_2fa_self_update_status() value.
+ * @return array{status:string,label:string}
+ */
+function force_2fa_self_update_health( $status ) {
+	switch ( $status ) {
+		case 'active':
+			return array(
+				'status' => 'good',
+				'label'  => __( 'Require Email 2FA is receiving updates', 'force-email-two-factor' ),
+			);
+		case 'disabled_config':
+			return array(
+				'status' => 'good',
+				'label'  => __( 'Require Email 2FA self-update is turned off (managed externally)', 'force-email-two-factor' ),
+			);
+		case 'disabled_vcs':
+			return array(
+				'status' => 'recommended',
+				'label'  => __( 'Require Email 2FA is not self-updating (working copy)', 'force-email-two-factor' ),
+			);
+		case 'unavailable_no_puc':
+			return array(
+				'status' => 'recommended',
+				'label'  => __( 'Require Email 2FA cannot self-update (updater files missing)', 'force-email-two-factor' ),
+			);
+		case 'disabled_no_update_uri':
+			return array(
+				'status' => 'recommended',
+				'label'  => __( 'Require Email 2FA is not self-updating (no update source)', 'force-email-two-factor' ),
+			);
+		default:
+			return array(
+				'status' => 'recommended',
+				'label'  => __( 'Require Email 2FA update status is unknown', 'force-email-two-factor' ),
+			);
+	}
+}
+
+/**
+ * Register a Site Health test that reports the self-update posture.
+ *
+ * Surfaces a self-update that isn't running — an intentional opt-out, a stray .git
+ * in a production install, a missing Update URI, or absent updater files — under
+ * Tools → Site Health, where an admin can find it, instead of a nagging admin
+ * notice on every page. Pure array transform, unit-tested.
+ *
+ * @param array $tests Site Health tests, keyed by 'direct' and 'async'.
+ * @return array
+ */
+function force_2fa_register_site_health( $tests ) {
+	$tests['direct']['force_2fa_self_update'] = array(
+		'label' => __( 'Require Email 2FA self-update', 'force-email-two-factor' ),
+		'test'  => 'force_2fa_site_health_self_update',
+	);
+	return $tests;
+}
+
+/**
  * Wire self-hosted plugin updates from the GitHub repository named in Update URI.
  *
  * WordPress core only checks WordPress.org for plugin updates; this plugin ships
@@ -895,9 +974,22 @@ function force_2fa_update_checker( $checker = null ) {
  * Registered on plugins_loaded rather than at file load so the zero-dependency
  * unit-test bootstrap — which records add_action() without ever firing it — never
  * instantiates PUC against WordPress functions it does not stub.
+ *
+ * Wired on every request (not gated to admin/cron/CLI): Plugin Update Checker
+ * injects available-update data on read via the site_transient_update_plugins
+ * filter, and that data is read outside the admin too — the front-end admin
+ * toolbar's update count for logged-in admins, REST requests, and management
+ * tools — so the injector must always be registered. Only self-update being
+ * disabled or a working copy short-circuits it (below).
  */
 function force_2fa_bootstrap_self_update() {
 	// @codeCoverageIgnoreStart
+	// Explicit opt-out for centrally-managed fleets (MainWP, Composer, git deploys):
+	// leave patching to the management layer instead of each site polling GitHub.
+	if ( ! force_2fa_self_update_enabled() ) {
+		return;
+	}
+
 	// Never self-update a working copy under version control. Plugin Update Checker
 	// is vendored (committed), so it is present in a git clone too — but a clone (or
 	// a git worktree, where .git is a file) is updated with `git pull`, and letting
@@ -941,9 +1033,60 @@ function force_2fa_bootstrap_self_update() {
 	// (and so PUC itself on the next update). This keeps the reviewed release asset
 	// as the only update payload, which is the documented trust boundary.
 	$vcs_api = $update_checker->getVcsApi();
-	$vcs_api->enableReleaseAssets( '/' . preg_quote( $slug, '/' ) . '\.zip$/i', $vcs_api::REQUIRE_RELEASE_ASSETS );
+	// Anchor both ends: the release asset is named exactly "<slug>.zip", so a
+	// start anchor keeps a differently-prefixed asset (e.g. "x-<slug>.zip") from
+	// also matching. Defense-in-depth — the release trust boundary already
+	// controls what assets exist.
+	$vcs_api->enableReleaseAssets( '/^' . preg_quote( $slug, '/' ) . '\.zip$/i', $vcs_api::REQUIRE_RELEASE_ASSETS );
 
 	force_2fa_update_checker( $update_checker );
+	// @codeCoverageIgnoreEnd
+}
+
+/**
+ * Site Health test callback: report whether — and why — self-update is running.
+ *
+ * Computes the same inputs the updater bootstrap uses and defers the verdict to the
+ * pure force_2fa_self_update_status(). An intentional state (active, or a
+ * deliberate opt-out) reports "good"; a likely-unintended one (a working-copy .git
+ * on a production site, absent updater files, or a blank Update URI) reports
+ * "recommended" — visible to an admin, never a page-nagging notice.
+ *
+ * @return array A Site Health result.
+ */
+function force_2fa_site_health_self_update() {
+	// @codeCoverageIgnoreStart
+	$puc_bootstrap  = __DIR__ . '/vendor/yahnis-elsts/plugin-update-checker/plugin-update-checker.php';
+	$headers        = get_file_data( __FILE__, array( 'update_uri' => 'Update URI' ) );
+	$has_update_uri = isset( $headers['update_uri'] ) && '' !== trim( $headers['update_uri'] );
+
+	$status = force_2fa_self_update_status(
+		force_2fa_self_update_enabled(),
+		file_exists( __DIR__ . '/.git' ),
+		is_readable( $puc_bootstrap ),
+		$has_update_uri
+	);
+	$health = force_2fa_self_update_health( $status );
+
+	$descriptions = array(
+		'active'                 => __( 'This plugin updates directly from its GitHub Releases, through the normal Dashboard &rarr; Updates flow and unattended auto-updates.', 'force-email-two-factor' ),
+		'disabled_config'        => __( 'Self-update is intentionally disabled (FORCE_2FA_DISABLE_SELF_UPDATE). Updates are expected to be delivered by your plugin management layer, e.g. MainWP, Composer, or git deploys.', 'force-email-two-factor' ),
+		'disabled_vcs'           => __( 'A .git directory is present, so WordPress will not replace this working copy with a release. On a production site, install the release zip instead; if this is intentional, update it via git or your management layer.', 'force-email-two-factor' ),
+		'unavailable_no_puc'     => __( 'The bundled updater files are missing, so this plugin cannot check for updates. Reinstall it from the official release zip.', 'force-email-two-factor' ),
+		'disabled_no_update_uri' => __( 'The Update URI header is empty, so no update source is configured. Point it at the source repository to receive updates.', 'force-email-two-factor' ),
+	);
+	$description  = isset( $descriptions[ $status ] ) ? $descriptions[ $status ] : '';
+
+	return array(
+		'label'       => $health['label'],
+		'status'      => $health['status'],
+		'badge'       => array(
+			'label' => __( 'Security', 'force-email-two-factor' ),
+			'color' => 'blue',
+		),
+		'description' => '' === $description ? '' : '<p>' . esc_html( $description ) . '</p>',
+		'test'        => 'force_2fa_self_update',
+	);
 	// @codeCoverageIgnoreEnd
 }
 
@@ -969,8 +1112,9 @@ function force_2fa_register_hooks() {
 	add_action( 'network_admin_notices', 'force_2fa_network_dependency_notice' );
 	add_action( 'admin_post_force_2fa_install_two_factor', 'force_2fa_handle_install_two_factor' );
 
-	// Migration nudge for installs that were per-site active before 1.9.0.
-	add_action( 'admin_notices', 'force_2fa_legacy_activation_notice' );
+	// Site Health: report the self-update posture (Tools → Site Health) instead of a
+	// nagging notice when the updater isn't running.
+	add_filter( 'site_status_tests', 'force_2fa_register_site_health' );
 }
 
 // Network-only on multisite: refuse per-site activation (see the function docblock).

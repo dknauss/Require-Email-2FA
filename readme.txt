@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.9.1
+Stable tag: 1.10.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -154,6 +154,22 @@ site-active (or absent) somewhere, enforcement silently no-ops there, and the
 Network Admin notice will tell you. For an un-deactivatable install, use the
 bundled `mu-loader.php`.
 
+= How does the plugin update, and can I turn that off? =
+
+It updates itself from its GitHub Releases (not WordPress.org) via the bundled
+Plugin Update Checker: new versions appear under **Dashboard &rarr; Updates** and
+through unattended auto-updates. On sites patched by a central manager (MainWP,
+Composer, git deploys), turn the self-updater off so each site does not poll
+GitHub:
+
+`
+define( 'FORCE_2FA_DISABLE_SELF_UPDATE', true );
+`
+
+Your management layer then delivers updates, and enforcement is unchanged. A
+**Tools &rarr; Site Health** check reports each site's update posture. See
+`docs/DEPLOYMENT.md` for the managed-vs-standalone deployment guide.
+
 = Does this remove a user's authenticator app or hardware key? =
 
 No. It appends the Email provider as a floor; any stronger factor the user
@@ -171,6 +187,26 @@ only allowlisted accounts using Application Passwords can skip the interactive
 challenge.
 
 == Changelog ==
+
+= 1.10.0 =
+* Deployment: new `FORCE_2FA_DISABLE_SELF_UPDATE` constant (and
+  `force_2fa_self_update_enabled` filter) to turn off the self-updater on sites
+  patched by a central manager (MainWP, Composer, git deploys), so each site does
+  not independently poll GitHub. One codebase, two modes; enforcement is unchanged.
+  See `docs/DEPLOYMENT.md`.
+* Site Health: a new **Tools &rarr; Site Health** check reports whether — and why —
+  self-update is running (active, intentionally disabled, a working-copy `.git`,
+  missing updater files, or a blank Update URI), instead of a page-nagging notice.
+* Updater hardening: the release-asset match is anchored to exactly
+  `force-email-two-factor.zip` (defense-in-depth).
+* Removed the pre-1.9.0 per-site "legacy activation" migration notice. Since 1.9.0
+  blocks per-site activation, no new install can reach that state, so the notice
+  guarded a scenario that can no longer occur.
+* i18n: use a literal `&` in the install-button labels (translators no longer see
+  a raw `&amp;` entity).
+* Tests & docs: added coverage for the Application-Password user binding, the
+  enforcement filter's argument count, and the dependency-unmet fail-safe;
+  corrected stale hook-ordering and dependency-guard descriptions.
 
 = 1.9.1 =
 * Updater: **require** the release asset. The self-updater now installs only the

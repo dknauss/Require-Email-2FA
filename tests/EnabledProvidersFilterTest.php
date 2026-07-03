@@ -47,18 +47,32 @@ final class EnabledProvidersFilterTest extends TestCase {
 		$this->assertSame( array( 'Two_Factor_Email' ), $result );
 	}
 
+	public function test_dependency_unmet_leaves_providers_untouched(): void {
+		// Email provider unregistered (another plugin stripped it from the
+		// registry): the dependency is not met, so the filter must NOT inject a
+		// provider Two Factor can't resolve — it returns the list untouched.
+		$GLOBALS['__force2fa_providers'] = array( 'Two_Factor_Totp' => new \stdClass() );
+		$this->user( 3, 'editoruser', array( 'editor' ) );
+		$result = force_2fa_filter_enabled_providers( array( 'Two_Factor_Totp' ), 3 );
+		$this->assertSame( array( 'Two_Factor_Totp' ), $result );
+	}
+
 	public function test_register_hooks_wires_both_filters(): void {
 		$GLOBALS['__force2fa_added_filters'] = array();
 		force_2fa_register_hooks();
 
-		$tags = array_map(
-			static function ( $registration ) {
-				return $registration[0];
-			},
-			$GLOBALS['__force2fa_added_filters']
-		);
+		$byTag = array();
+		foreach ( $GLOBALS['__force2fa_added_filters'] as $registration ) {
+			$byTag[ $registration[0] ] = $registration;
+		}
 
-		$this->assertContains( 'two_factor_enabled_providers_for_user', $tags );
-		$this->assertContains( 'two_factor_user_api_login_enable', $tags );
+		$this->assertArrayHasKey( 'two_factor_enabled_providers_for_user', $byTag );
+		$this->assertArrayHasKey( 'two_factor_user_api_login_enable', $byTag );
+
+		// The enforcement callback needs $user_id (its 2nd arg) to resolve the user
+		// for the exemption check. If this regressed to 1, $user_id would arrive
+		// null, get_userdata(null) → false, and every excluded-role user would be
+		// force-enabled — a silent break of the exemption contract.
+		$this->assertSame( 2, $byTag['two_factor_enabled_providers_for_user'][3] );
 	}
 }
