@@ -244,6 +244,23 @@ function force_2fa_dependency_action_body( $installed, $network ) {
 }
 
 /**
+ * Body copy for the multisite per-site heads-up notice, by installed state.
+ *
+ * Shown to a site admin on a subsite where Two Factor is not active. It is
+ * informational (they cannot network-activate it themselves — it points them to
+ * the network admin), but it still reflects whether Two Factor is installed on the
+ * network but inactive here, versus not installed at all. Pure decision, unit-tested.
+ *
+ * @param bool $installed Whether two-factor/two-factor.php is present on disk.
+ * @return string Translated body sentence(s).
+ */
+function force_2fa_dependency_heads_up_body( $installed ) {
+	return $installed
+		? __( 'The Two Factor plugin is installed but not active on this site, so 2FA is not enforced here. Ask your network administrator to network-activate Two Factor.', 'force-email-two-factor' )
+		: __( 'The Two Factor plugin is not installed, so 2FA is not enforced on this site. Ask your network administrator to install and network-activate Two Factor.', 'force-email-two-factor' );
+}
+
+/**
  * Whether this plugin runs network-wide on multisite.
  *
  * True when it is formally network-active OR mu-loaded — an mu-loader install runs
@@ -674,7 +691,7 @@ function force_2fa_dependency_notice() {
 	printf(
 		'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
 		esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA on this site.', 'force-email-two-factor' ),
-		esc_html__( 'The Two Factor plugin is not active here, so 2FA is not enforced for this site. Ask your network administrator to network-activate Two Factor.', 'force-email-two-factor' )
+		esc_html( force_2fa_dependency_heads_up_body( file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE ) ) )
 	);
 }
 

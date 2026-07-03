@@ -177,4 +177,12 @@ final class DependencyCheckTest extends TestCase {
 		$this->assertStringContainsStringIgnoringCase( 'not network-active', $network );
 		$this->assertStringNotContainsStringIgnoringCase( 'install and network-activate', $network );
 	}
+
+	public function test_heads_up_body_says_installed_when_present(): void {
+		$this->assertStringContainsStringIgnoringCase( 'installed but not active', force_2fa_dependency_heads_up_body( true ) );
+	}
+
+	public function test_heads_up_body_says_not_installed_when_absent(): void {
+		$this->assertStringContainsStringIgnoringCase( 'not installed', force_2fa_dependency_heads_up_body( false ) );
+	}
 }
