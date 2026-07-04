@@ -1,0 +1,52 @@
+name: Semgrep (PHP security)
+
+# CodeQL cannot analyze PHP, so codeql.yml only covers the GitHub Actions workflows.
+# This job covers the plugin's own PHP with Semgrep's PHP + security rulesets and
+# reports findings to the Security tab (code scanning) via SARIF. It is report-only
+# (non-blocking) for now: findings surface as alerts rather than failing the build.
+#
+# Actions are pinned to full commit SHAs and Semgrep to an exact version, matching
+# the repo's supply-chain convention (see docs/SUPPLY-CHAIN-SECURITY.md).
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  schedule:
+    - cron: '30 5 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep scan (PHP)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Semgrep
+        run: pip install --no-cache-dir "semgrep==1.168.0"
+
+      - name: Scan the plugin's PHP
+        continue-on-error: true # report-only: findings go to code scanning, don't fail CI
+        run: |
+          semgrep scan \
+            --config p/php \
+            --config p/security-audit \
+            --sarif --output semgrep.sarif \
+            force-email-two-factor.php mu-loader.php bin
+
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
