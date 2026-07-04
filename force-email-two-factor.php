@@ -12,7 +12,7 @@
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:      force-email-two-factor
  *
- * @package Force_Email_Two_Factor
+ * @package force-email-two-factor
  *
  * Soft dependency: the Two Factor plugin (slug "two-factor"). This plugin
  * activates on its own and then no-ops safely until Two Factor is active — every
