@@ -27,6 +27,13 @@
 /.gitattributes               @dknauss
 /phpcs.xml.dist               @dknauss
 /phpstan.neon.dist            @dknauss
+/phpstan-baseline.neon        @dknauss
 /phpstan/                     @dknauss
 /composer.json                @dknauss
 /composer.lock                @dknauss
+
+# The definitions of the required CI checks themselves — a change here can weaken or
+# skip a gate while still satisfying branch protection, so it needs the same review.
+/phpunit.xml.dist             @dknauss
+/bin/                         @dknauss
+/playground/                  @dknauss

@@ -46,6 +46,22 @@ jobs:
       PLUGIN_SLUG: force-email-two-factor
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0 # full history so the default-branch ancestry check below can resolve
+
+      - name: Verify the tag points at a reviewed commit on the default branch
+        run: |
+          # The tag ruleset controls WHO can push a v* tag, not WHAT it points at, and
+          # the build below archives HEAD. Refuse to release a commit that never went
+          # through PR + CODEOWNERS review on the default branch — otherwise a
+          # tag-authorized (or compromised) account could ship unreviewed code by
+          # tagging an arbitrary commit directly.
+          default_branch="${{ github.event.repository.default_branch }}"
+          git fetch --no-tags origin "${default_branch}"
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" "origin/${default_branch}"; then
+            echo "::error::Tag ${GITHUB_REF_NAME} (${GITHUB_SHA}) is not contained in origin/${default_branch}. Release tags must point at a reviewed commit on the default branch."
+            exit 1
+          fi
 
       - name: Verify tag matches the plugin Version header
         run: |
@@ -92,7 +108,13 @@ jobs:
       # Cryptographic provenance: proof the zip was built by THIS repo's release
       # workflow from this commit (Sigstore). Auditable via `gh attestation verify`.
       # See docs/SUPPLY-CHAIN-SECURITY.md section 3.
+      #
+      # Gated on public visibility: GitHub artifact attestations require Enterprise
+      # Cloud on private/internal repos, so on a private fork (Free/Pro/Team) this
+      # step would fail before the asset is uploaded. Those forks still publish with
+      # the SHA-256 checksum; a public fork or upstream also gets provenance.
       - name: Attest build provenance for the release zip
+        if: ${{ github.event.repository.visibility == 'public' }}
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           subject-path: ${{ env.PLUGIN_SLUG }}.zip
@@ -100,6 +122,7 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_VISIBILITY: ${{ github.event.repository.visibility }}
         run: |
           tag="${GITHUB_REF_NAME}"
           if gh release view "${tag}" >/dev/null 2>&1; then
@@ -115,8 +138,12 @@ jobs:
           {
             echo
             echo "## Verify this release"
-            echo "- Checksum: sha256sum -c ${PLUGIN_SLUG}.zip.sha256"
-            echo "- Provenance: gh attestation verify ${PLUGIN_SLUG}.zip --repo ${GITHUB_REPOSITORY}"
+            echo "- Checksum: \`sha256sum -c ${PLUGIN_SLUG}.zip.sha256\`"
+            if [ "${REPO_VISIBILITY}" = "public" ]; then
+              # Pin --signer-workflow so provenance from any OTHER workflow in this
+              # repo is rejected, not just anything from this repo identity.
+              echo "- Provenance: \`gh attestation verify ${PLUGIN_SLUG}.zip --repo ${GITHUB_REPOSITORY} --signer-workflow ${GITHUB_REPOSITORY}/.github/workflows/release.yml\`"
+            fi
             echo "- Reproduce from source: see docs/SUPPLY-CHAIN-SECURITY.md"
           } >> notes.md
           gh release edit "${tag}" --notes-file notes.md

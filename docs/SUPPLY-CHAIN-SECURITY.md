@@ -34,12 +34,17 @@ intact, but you do not have to add them:
 - **Actions pinned to full commit SHAs.** Every `uses:` in CI and release is pinned
   to a 40-char SHA (Dependabot bumps them). A moved tag cannot inject code into the
   `contents: write` release job.
-- **Least-privilege token.** The release job requests only `contents: write`; it
-  uses the ephemeral `GITHUB_TOKEN`, not a long-lived PAT.
+- **Least-privilege token.** The release job requests `contents: write` (create the
+  Release and upload assets) plus `id-token: write` and `attestations: write` (mint
+  the OIDC token and record the build-provenance attestation, section 3) — and
+  nothing else. It uses the ephemeral `GITHUB_TOKEN`, not a long-lived PAT.
 - **Tag-triggered only.** Release runs on `push: tags: v*` — never
   `pull_request_target` — so untrusted PR code never runs with the release token.
 - **Tag ↔ version guard.** The workflow refuses to publish if the tag does not match
   the `Version:` header, so a stray tag cannot ship a mislabeled build.
+- **Reviewed-commit guard.** The workflow refuses to publish unless the tagged commit
+  is an ancestor of the default branch, so a `v*` tag on an unreviewed commit cannot
+  ship — the tag ruleset controls *who* tags, this controls *what* a tag may point at.
 - **Only the reviewed asset installs.** The runtime updater uses
   `REQUIRE_RELEASE_ASSETS` with an anchored `^<slug>\.zip$` pattern, so a Release
   without the exact built asset offers **no** update (it never falls back to
@@ -96,7 +101,15 @@ Publishing a `v*` tag *is* shipping code to every site. Gate it:
 
 - **Tag ruleset** targeting `v*` (**Settings → Rules → Rulesets → New tag
   ruleset**): restrict **creation**, **update**, and **deletion** to a small bypass
-  list of trusted maintainers. Optionally **require signed tags.**
+  list of trusted maintainers. Optionally **require signed tags.** (A ruleset
+  restricting only *update* and *deletion* — not *creation* — protects existing
+  release tags from being moved or deleted without ever blocking new releases; that
+  is the default this repo ships.)
+- **The tag must point at a reviewed commit.** A tag ruleset governs *who* may tag
+  and whether a tag can move, but not *what commit* it points at — and the build
+  archives that commit's tree. `release.yml` therefore refuses to publish unless the
+  tagged commit is an ancestor of the default branch, so a `v*` tag on an unreviewed
+  commit (bypassing the branch ruleset and CODEOWNERS above) cannot ship.
 - **Release environment approval.** The release job in
   [`release.yml`](../.github/workflows/release.yml) declares
   `environment: release`. Configure that environment (**Settings → Environments →
@@ -149,11 +162,21 @@ independent integrity signals plus a reproducibility path:
 2. **Build provenance attestation.** The workflow attests the zip with
    [`actions/attest-build-provenance`](https://github.com/actions/attest-build-provenance)
    (Sigstore). This is *authenticity*: cryptographic proof the artifact was built by
-   this repository's release workflow from a specific commit. Verify with:
+   this repository's release workflow from a specific commit. Verify with — and pin
+   `--signer-workflow`, so provenance produced by any *other* workflow in the repo is
+   rejected, not merely anything bearing the repo's identity:
 
    ```sh
-   gh attestation verify force-email-two-factor.zip --repo <owner>/<repo>
+   gh attestation verify force-email-two-factor.zip \
+     --repo <owner>/<repo> \
+     --signer-workflow <owner>/<repo>/.github/workflows/release.yml
    ```
+
+   > **Private forks:** GitHub artifact attestations require GitHub Enterprise Cloud
+   > on private/internal repositories. The workflow gates this step on public
+   > visibility, so a private fork on Free/Pro/Team still publishes (checksum +
+   > reproducible-build verification apply) but without a provenance attestation.
+   > Keep the update repo **public**, or use Enterprise Cloud, to get provenance.
 
 3. **Reproducible from source.** Because the build is `git archive` of the tag, the
    zip's contents equal the reviewed tree. Rebuild and diff the *contents* (zip
