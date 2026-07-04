@@ -76,10 +76,8 @@ On multisite this plugin is **network-only** — you **Network Activate** it
 * This is verified end-to-end on a real multisite by `bin/multisite-e2e.sh` (the
   `multisite-e2e` CI job): a per-site activation is refused, `--network` succeeds.
 
-  > [!WARNING]
-  > This is deliberate. Users and their Two Factor settings are network-global, so a per-site activation would key enforcement off the **login entry point, not the user** — a global user could authenticate via a site where the plugin was inactive and skip enforcement. Network activation closes that gap.
-  >
-  > A true network-wide guarantee **also requires the Two Factor plugin to be network-active.** If it's only site-active (or absent) somewhere, enforcement silently no-ops there — the **Network Admin notice** warns you when this is the case and offers a one-click install + network-activate.
+> [!WARNING]
+> Mutisite Users and their Two Factor settings are network-global, so a per-site activation would key enforcement off the **login entry point, not the user** — a global user could authenticate via a site where the plugin was inactive and skip enforcement. Network activation closes that gap. A true network-wide guarantee **also requires the Two Factor plugin to be network-active.** If it's only site-active (or absent) somewhere, enforcement silently no-ops there — the **Network Admin notice** warns you when this is the case and offers a one-click install + network-activate.
 
 On single-site WordPress, just activate it normally.
 
