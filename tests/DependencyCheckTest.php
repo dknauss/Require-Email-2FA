@@ -253,4 +253,41 @@ final class DependencyCheckTest extends TestCase {
 		$this->assertArrayNotHasKey( 'force2faDependencyNotice', $GLOBALS['__force2fa_localized'] );
 		$this->assertSame( array(), $GLOBALS['__force2fa_inline_scripts'] );
 	}
+
+	public function test_notice_refresh_reports_can_install_true_for_a_capable_user(): void {
+		// Default stub user holds every cap.
+		force_2fa_enqueue_notice_refresh( 'plugins.php' );
+
+		$this->assertTrue( $GLOBALS['__force2fa_localized']['force2faDependencyNotice']['canInstall'] );
+	}
+
+	public function test_notice_refresh_reports_can_install_false_without_install_cap(): void {
+		// A role that can activate/delete an installed plugin but cannot install one:
+		// after deleting Two Factor the repaint must NOT hand the browser an
+		// "Install & activate" button the user can never complete.
+		$GLOBALS['__force2fa_user_caps'] = array( 'activate_plugins', 'delete_plugins' );
+
+		force_2fa_enqueue_notice_refresh( 'plugins.php' );
+
+		$this->assertFalse( $GLOBALS['__force2fa_localized']['force2faDependencyNotice']['canInstall'] );
+	}
+
+	// --- Network Admin warns when Two Factor is active but its Email provider is gone ---
+
+	public function test_warn_network_unusable_when_self_active_user_can_manage_and_unusable(): void {
+		$this->assertTrue( force_2fa_should_warn_network_unusable( true, true, 'unusable' ) );
+	}
+
+	public function test_no_network_unusable_warning_when_state_is_not_unusable(): void {
+		$this->assertFalse( force_2fa_should_warn_network_unusable( true, true, 'inactive' ) );
+		$this->assertFalse( force_2fa_should_warn_network_unusable( true, true, 'absent' ) );
+	}
+
+	public function test_no_network_unusable_warning_when_self_not_network_active(): void {
+		$this->assertFalse( force_2fa_should_warn_network_unusable( false, true, 'unusable' ) );
+	}
+
+	public function test_no_network_unusable_warning_when_user_cannot_manage_network(): void {
+		$this->assertFalse( force_2fa_should_warn_network_unusable( true, false, 'unusable' ) );
+	}
 }

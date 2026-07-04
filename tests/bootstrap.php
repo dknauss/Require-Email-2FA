@@ -82,6 +82,16 @@ function is_network_admin() {
 	return ! empty( $GLOBALS['__force2fa_is_network_admin'] );
 }
 
+// Current-user capability check. Defaults to a fully-capable admin (every cap); a
+// test can set $GLOBALS['__force2fa_user_caps'] to the exact caps the user holds
+// to exercise a capability-limited role (e.g. can activate but not install).
+function current_user_can( $cap ) {
+	if ( isset( $GLOBALS['__force2fa_user_caps'] ) ) {
+		return in_array( $cap, $GLOBALS['__force2fa_user_caps'], true );
+	}
+	return true;
+}
+
 // --- WordPress class stubs ----------------------------------------------------
 
 if ( ! class_exists( 'WP_User' ) ) {
