@@ -215,4 +215,42 @@ final class DependencyCheckTest extends TestCase {
 		$this->assertSame( 'unusable', force_2fa_dependency_state( true, true ) );
 		$this->assertSame( 'unusable', force_2fa_dependency_state( false, true ) );
 	}
+
+	// --- AJAX-delete notice refresh hands the browser context-correct wording ---
+
+	public function test_notice_refresh_localizes_network_wording_in_network_admin(): void {
+		// On the Network Admin plugins page, deleting Two Factor must repaint the
+		// notice with the NETWORK wording (regression: it hardcoded single-site copy,
+		// so the network notice kept saying "Network-activate" after a delete).
+		$GLOBALS['__force2fa_is_network_admin'] = true;
+
+		force_2fa_enqueue_notice_refresh( 'plugins.php' );
+
+		$this->assertSame(
+			'Install & network-activate Two Factor',
+			$GLOBALS['__force2fa_localized']['force2faDependencyNotice']['label']
+		);
+		$this->assertStringContainsStringIgnoringCase(
+			'install and network-activate',
+			$GLOBALS['__force2fa_localized']['force2faDependencyNotice']['body']
+		);
+	}
+
+	public function test_notice_refresh_localizes_single_site_wording_outside_network_admin(): void {
+		$GLOBALS['__force2fa_is_network_admin'] = false;
+
+		force_2fa_enqueue_notice_refresh( 'plugins.php' );
+
+		$this->assertSame(
+			'Install & activate Two Factor',
+			$GLOBALS['__force2fa_localized']['force2faDependencyNotice']['label']
+		);
+	}
+
+	public function test_notice_refresh_noops_away_from_the_plugins_page(): void {
+		force_2fa_enqueue_notice_refresh( 'index.php' );
+
+		$this->assertArrayNotHasKey( 'force2faDependencyNotice', $GLOBALS['__force2fa_localized'] );
+		$this->assertSame( array(), $GLOBALS['__force2fa_inline_scripts'] );
+	}
 }

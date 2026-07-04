@@ -200,8 +200,12 @@ challenge.
   Activate button that would do nothing.
 * Admin UX: after deleting Two Factor via the Plugins screen's AJAX "Delete" link,
   the dependency notice updates its copy in place — and scrolls into view — instead
-  of showing stale pre-delete text, with no jarring full-page reload. (The plugin's
-  first, tiny admin script, loaded only on the Plugins screen.)
+  of showing stale pre-delete text, with no jarring full-page reload. This works on
+  both the single-site notice and the **Network Admin** notice, and the repainted
+  copy follows the screen: **Install & network-activate Two Factor** in Network
+  Admin, **Install & activate Two Factor** on a single site — so the button never
+  offers to activate a plugin that is no longer installed. (The plugin's first, tiny
+  admin script, loaded only on the Plugins screen.)
 
 = 1.10.0 =
 * Deployment: new `FORCE_2FA_DISABLE_SELF_UPDATE` constant (and

@@ -803,7 +803,7 @@ function force_2fa_network_dependency_notice() {
 		$install_url = wp_nonce_url( admin_url( 'admin-post.php?action=' . $action ), $action );
 
 		printf(
-			'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p><a href="%3$s" class="button button-primary">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
+			'<div class="notice notice-warning force-2fa-dep-notice"><p><strong>%1$s</strong> <span class="force-2fa-dep-body">%2$s</span></p><p><a href="%3$s" class="button button-primary force-2fa-dep-action">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
 			esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA network-wide.', 'force-email-two-factor' ),
 			esc_html( force_2fa_dependency_action_body( $installed, true ) ),
 			esc_url( $install_url ),
@@ -939,9 +939,12 @@ function force_2fa_handle_install_two_factor() {
  * the page themselves, so only delete needs this. Rather than force a full reload —
  * which triggers the browser's "reload site?" prompt and jumps the scroll position —
  * this updates the notice's copy in place (to the now-absent wording) and scrolls it
- * into view, using WordPress's own 'wp-plugin-delete-success' event. The button's
- * action is unchanged: it self-heals, installing Two Factor first when absent.
- * Enqueued only on plugins.php; a viewer there already holds activate_plugins.
+ * into view, using WordPress's own 'wp-plugin-delete-success' event. Works for both
+ * the single-site notice and the Network Admin notice — the wording it hands the
+ * browser follows is_network_admin() so it never disagrees with the PHP-rendered
+ * notice. The button's action is unchanged: it self-heals, installing Two Factor
+ * first when absent. Enqueued only on plugins.php; a viewer there already holds
+ * activate_plugins.
  *
  * @param string $hook The current admin page's hook suffix.
  */
@@ -950,14 +953,19 @@ function force_2fa_enqueue_notice_refresh( $hook ) {
 		return;
 	}
 
+	// Network Admin repaints the network notice ("Install & network-activate");
+	// a single-site plugins.php repaints its own ("Install & activate"). Match the
+	// screen so JS and the server-rendered PHP notice never disagree.
+	$network = is_network_admin();
+
 	// The exact copy the notice should show once Two Factor is gone — same source
 	// the PHP notice uses, so JS and PHP never drift.
 	wp_localize_script(
 		'updates',
 		'force2faDependencyNotice',
 		array(
-			'body'  => force_2fa_dependency_action_body( false, false ),
-			'label' => force_2fa_dependency_action_label( false, false ),
+			'body'  => force_2fa_dependency_action_body( false, $network ),
+			'label' => force_2fa_dependency_action_label( false, $network ),
 		)
 	);
 

@@ -17,7 +17,9 @@ abstract class TestCase extends BaseTestCase {
 		$GLOBALS['__force2fa_did_action']    = array();
 		$GLOBALS['__force2fa_added_filters'] = array();
 		$GLOBALS['__force2fa_added_actions'] = array();
-		unset( $GLOBALS['force_2fa_app_password_user_id'], $GLOBALS['__force2fa_providers'] );
+		$GLOBALS['__force2fa_localized']      = array();
+		$GLOBALS['__force2fa_inline_scripts'] = array();
+		unset( $GLOBALS['force_2fa_app_password_user_id'], $GLOBALS['__force2fa_providers'], $GLOBALS['__force2fa_is_network_admin'] );
 	}
 
 	/** Register a WP_User that get_userdata() will return for its ID. */
