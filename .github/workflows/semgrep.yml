@@ -25,6 +25,7 @@ jobs:
     permissions:
       contents: read
       security-events: write # upload SARIF to code scanning
+      actions: read # required for SARIF upload on private/internal repos
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
@@ -36,7 +37,10 @@ jobs:
         run: pip install --no-cache-dir "semgrep==1.168.0"
 
       - name: Scan the plugin's PHP
-        continue-on-error: true # report-only: findings go to code scanning, don't fail CI
+        # Report-only for FINDINGS: without --error, `semgrep scan` exits 0 even when
+        # it finds issues (they surface as code-scanning alerts via the SARIF upload).
+        # A nonzero exit means a real scanner/config/rule failure, so let it fail the
+        # job rather than silently uploading an empty or missing SARIF.
         run: |
           semgrep scan \
             --config p/php \
