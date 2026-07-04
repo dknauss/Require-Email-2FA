@@ -6,7 +6,7 @@
  * Description:      Requires the Two Factor plugin and makes emailed 2FA the default, required login factor for all users.
  * Author:           Pixel
  * Author URI:       https://wearepixel.ca
- * Version:          1.10.0
+ * Version:          1.10.1
  * Requires PHP:     7.2
  * License:          GPL-2.0-or-later
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
@@ -109,7 +109,7 @@ if ( defined( 'FORCE_2FA_DISABLE' ) && FORCE_2FA_DISABLE ) {
 if ( defined( 'FORCE_2FA_LOADED' ) ) {
 	return;
 }
-define( 'FORCE_2FA_LOADED', '1.10.0' );
+define( 'FORCE_2FA_LOADED', '1.10.1' );
 // @codeCoverageIgnoreEnd
 
 /**
@@ -176,6 +176,37 @@ function force_2fa_should_nag_network( $self_network_active, $dependency_met_net
 }
 
 /**
+ * Whether the Network Admin should warn that Two Factor is active but unusable.
+ *
+ * force_2fa_should_nag_network() only fires when Two Factor is NOT network-active,
+ * so it misses the case where Two Factor IS network-active but a two_factor_providers
+ * filter removed Two_Factor_Email: enforcement silently no-ops network-wide while the
+ * "network activation" gate reports the dependency met. This surfaces that gap on the
+ * network plugins page (no button — activation cannot fix a missing provider; it must
+ * be restored).
+ *
+ * Gated on $dependency_met_network (Two Factor actually network-active): when Two
+ * Factor is only site-active on the main site, Two_Factor_Core still loads in Network
+ * Admin and the state would read 'unusable', but the real fix there is to
+ * network-activate Two Factor — so we defer to the network-activation nag instead of
+ * pre-empting it with a no-button warning. Pure decision, unit-tested; $dependency_state
+ * comes from force_2fa_dependency_state(), which is only 'unusable' when Two Factor is
+ * loaded but the dependency is unmet.
+ *
+ * @param bool   $self_network_active     Whether Require Email 2FA is network-active.
+ * @param bool   $user_can_manage_network Whether the user can manage network plugins.
+ * @param bool   $dependency_met_network  Whether Two Factor is network-active.
+ * @param string $dependency_state        force_2fa_dependency_state() result.
+ * @return bool True if the network unusable-provider warning should render.
+ */
+function force_2fa_should_warn_network_unusable( $self_network_active, $user_can_manage_network, $dependency_met_network, $dependency_state ) {
+	return (bool) $self_network_active
+		&& (bool) $user_can_manage_network
+		&& (bool) $dependency_met_network
+		&& 'unusable' === $dependency_state;
+}
+
+/**
  * The capabilities required to satisfy the dependency from the admin notice.
  *
  * Returns EVERY capability the action needs, so they are checked independently
@@ -196,6 +227,91 @@ function force_2fa_required_install_caps( $already_installed, $network = false )
 	}
 	$caps[] = $network ? 'manage_network_plugins' : 'activate_plugins';
 	return $caps;
+}
+
+/**
+ * Button label for the dependency notice's one-click action, by state.
+ *
+ * The action installs Two Factor only when it is not already on disk; when it is
+ * present-but-inactive the action just activates it — so the label says "Activate"
+ * rather than always "Install & activate". Pure decision, unit-tested; the notice
+ * glue renders it (see force_2fa_dependency_notice / _network_dependency_notice).
+ *
+ * @param bool $installed Whether two-factor/two-factor.php is present on disk.
+ * @param bool $network   Whether this is the network-wide (multisite) action.
+ * @return string Translated button label.
+ */
+function force_2fa_dependency_action_label( $installed, $network ) {
+	if ( $network ) {
+		return $installed
+			? __( 'Network-activate Two Factor', 'force-email-two-factor' )
+			: __( 'Install & network-activate Two Factor', 'force-email-two-factor' );
+	}
+	return $installed
+		? __( 'Activate Two Factor', 'force-email-two-factor' )
+		: __( 'Install & activate Two Factor', 'force-email-two-factor' );
+}
+
+/**
+ * Body copy for the actionable dependency notice, by state.
+ *
+ * Mirrors force_2fa_dependency_action_label(): when Two Factor is present but
+ * inactive the copy says so and asks to activate it, instead of telling the admin
+ * to install a plugin that is already there. Pure decision, unit-tested.
+ *
+ * @param bool $installed Whether two-factor/two-factor.php is present on disk.
+ * @param bool $network   Whether this is the network-wide (multisite) action.
+ * @return string Translated body sentence(s).
+ */
+function force_2fa_dependency_action_body( $installed, $network ) {
+	if ( $network ) {
+		return $installed
+			? __( 'It is network-active, but the Two Factor plugin is installed but not network-active — so 2FA is not enforced on sites where Two Factor is inactive. Network-activate Two Factor to close the gap.', 'force-email-two-factor' )
+			: __( 'It is network-active, but the Two Factor plugin is not — so 2FA is not enforced on sites where Two Factor is inactive. Install and network-activate Two Factor to close the gap.', 'force-email-two-factor' );
+	}
+	return $installed
+		? __( 'The Two Factor plugin is installed but not active. Activate it to start enforcing 2FA for all users.', 'force-email-two-factor' )
+		: __( 'It needs the Two Factor plugin to be installed and active. Until then, 2FA is not enforced for any user.', 'force-email-two-factor' );
+}
+
+/**
+ * Body copy for the multisite per-site heads-up notice, by installed state.
+ *
+ * Shown to a site admin on a subsite where Two Factor is not active. It is
+ * informational (they cannot network-activate it themselves — it points them to
+ * the network admin), but it still reflects whether Two Factor is installed on the
+ * network but inactive here, versus not installed at all. Pure decision, unit-tested.
+ *
+ * @param bool $installed Whether two-factor/two-factor.php is present on disk.
+ * @return string Translated body sentence(s).
+ */
+function force_2fa_dependency_heads_up_body( $installed ) {
+	return $installed
+		? __( 'The Two Factor plugin is installed but not active on this site, so 2FA is not enforced here. Ask your network administrator to network-activate Two Factor.', 'force-email-two-factor' )
+		: __( 'The Two Factor plugin is not installed, so 2FA is not enforced on this site. Ask your network administrator to install and network-activate Two Factor.', 'force-email-two-factor' );
+}
+
+/**
+ * Classify why the Two Factor dependency is unmet, for the notice copy.
+ *
+ * Called only when force_2fa_dependency_met() is already false. Distinguishes the
+ * three reasons so a notice never offers a fix that can't work:
+ *   - 'absent'   — not installed on disk (needs install + activate),
+ *   - 'inactive' — installed but not active (needs activate),
+ *   - 'unusable' — Two Factor is loaded/active but its Email provider is
+ *                  unregistered (activation is a no-op; the provider must be
+ *                  restored). This is why $tf_loaded wins over $installed.
+ * Pure decision, unit-tested.
+ *
+ * @param bool $installed Whether two-factor/two-factor.php is present on disk.
+ * @param bool $tf_loaded Whether Two_Factor_Core is loaded (Two Factor active here).
+ * @return string One of 'absent', 'inactive', 'unusable'.
+ */
+function force_2fa_dependency_state( $installed, $tf_loaded ) {
+	if ( $tf_loaded ) {
+		return 'unusable';
+	}
+	return $installed ? 'inactive' : 'absent';
 }
 
 /**
@@ -595,6 +711,20 @@ function force_2fa_dependency_notice() {
 			return;
 		}
 
+		$installed = file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE );
+
+		// Two Factor is loaded but the dependency is still unmet: its Email provider
+		// is unregistered, so activating it again is a no-op. Point to restoring the
+		// provider instead of offering a button that can't fix it.
+		if ( 'unusable' === force_2fa_dependency_state( $installed, class_exists( 'Two_Factor_Core' ) ) ) {
+			printf(
+				'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
+				esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA yet.', 'force-email-two-factor' ),
+				esc_html__( 'The Two Factor plugin is active, but its Email provider is not available, so email 2FA cannot be enforced. Restore the Email provider — it may have been removed by another plugin or a two_factor_providers filter.', 'force-email-two-factor' )
+			);
+			return;
+		}
+
 		// Only offer the one-click button when the user holds every capability its
 		// handler requires; otherwise inform without a button that would be denied.
 		if ( force_2fa_current_user_can_install_dependency( false ) ) {
@@ -602,11 +732,11 @@ function force_2fa_dependency_notice() {
 			$install_url = wp_nonce_url( admin_url( 'admin-post.php?action=' . $action ), $action );
 
 			printf(
-				'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p><a href="%3$s" class="button button-primary">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
+				'<div class="notice notice-warning force-2fa-dep-notice"><p><strong>%1$s</strong> <span class="force-2fa-dep-body">%2$s</span></p><p><a href="%3$s" class="button button-primary force-2fa-dep-action">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
 				esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA yet.', 'force-email-two-factor' ),
-				esc_html__( 'It needs the Two Factor plugin to be installed and active. Until then, 2FA is not enforced for any user.', 'force-email-two-factor' ),
+				esc_html( force_2fa_dependency_action_body( $installed, false ) ),
 				esc_url( $install_url ),
-				esc_html__( 'Install & activate Two Factor', 'force-email-two-factor' ),
+				esc_html( force_2fa_dependency_action_label( $installed, false ) ),
 				esc_url( 'https://wordpress.org/plugins/two-factor/' ),
 				esc_html__( 'Learn more', 'force-email-two-factor' )
 			);
@@ -625,10 +755,23 @@ function force_2fa_dependency_notice() {
 		return;
 	}
 
+	$installed = file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE );
+
+	// Same unusable case on a subsite: Two Factor is active here but its Email
+	// provider is gone, so "activate it" would be wrong.
+	if ( 'unusable' === force_2fa_dependency_state( $installed, class_exists( 'Two_Factor_Core' ) ) ) {
+		printf(
+			'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
+			esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA on this site.', 'force-email-two-factor' ),
+			esc_html__( 'The Two Factor plugin is active here, but its Email provider is not available, so email 2FA cannot be enforced on this site. Ask your network administrator to restore the Email provider.', 'force-email-two-factor' )
+		);
+		return;
+	}
+
 	printf(
 		'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
 		esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA on this site.', 'force-email-two-factor' ),
-		esc_html__( 'The Two Factor plugin is not active here, so 2FA is not enforced for this site. Ask your network administrator to network-activate Two Factor.', 'force-email-two-factor' )
+		esc_html( force_2fa_dependency_heads_up_body( $installed ) )
 	);
 }
 
@@ -675,10 +818,34 @@ function force_2fa_dependency_met_network() {
  * + NETWORK-activate of Two Factor so the super admin closes the gap in one place.
  */
 function force_2fa_network_dependency_notice() {
+	$self_network_active    = force_2fa_self_network_active();
+	$can_manage_network     = current_user_can( 'manage_network_plugins' );
+	$dependency_met_network = force_2fa_dependency_met_network();
+
+	// Two Factor is network-active but its Email provider is gone: network activation
+	// reports the dependency "met", yet enforcement no-ops on every site. Activation
+	// can't fix it, so warn (no button) to restore the provider — the network-wide
+	// counterpart to the per-site "unusable" heads-up. Only when Two Factor is actually
+	// network-active; a site-active-only main site defers to the network-activation nag.
+	if ( ! force_2fa_dependency_met() ) {
+		$state = force_2fa_dependency_state(
+			file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE ),
+			class_exists( 'Two_Factor_Core' )
+		);
+		if ( force_2fa_should_warn_network_unusable( $self_network_active, $can_manage_network, $dependency_met_network, $state ) ) {
+			printf(
+				'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
+				esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA network-wide.', 'force-email-two-factor' ),
+				esc_html__( 'The Two Factor plugin is active, but its Email provider is not available, so email 2FA cannot be enforced network-wide. Restore the Email provider — it may have been removed by another plugin or a two_factor_providers filter.', 'force-email-two-factor' )
+			);
+			return;
+		}
+	}
+
 	if ( ! force_2fa_should_nag_network(
-		force_2fa_self_network_active(),
-		force_2fa_dependency_met_network(),
-		current_user_can( 'manage_network_plugins' )
+		$self_network_active,
+		$dependency_met_network,
+		$can_manage_network
 	) ) {
 		return;
 	}
@@ -686,15 +853,16 @@ function force_2fa_network_dependency_notice() {
 	// Only offer the one-click button when the user holds every capability its
 	// handler requires; otherwise inform without a button that would be denied.
 	if ( force_2fa_current_user_can_install_dependency( true ) ) {
+		$installed   = file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE );
 		$action      = 'force_2fa_install_two_factor';
 		$install_url = wp_nonce_url( admin_url( 'admin-post.php?action=' . $action ), $action );
 
 		printf(
-			'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p><p><a href="%3$s" class="button button-primary">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
+			'<div class="notice notice-warning force-2fa-dep-notice"><p><strong>%1$s</strong> <span class="force-2fa-dep-body">%2$s</span></p><p><a href="%3$s" class="button button-primary force-2fa-dep-action">%4$s</a> &nbsp; <a href="%5$s" target="_blank" rel="noopener noreferrer">%6$s</a></p></div>',
 			esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA network-wide.', 'force-email-two-factor' ),
-			esc_html__( 'It is network-active, but the Two Factor plugin is not — so 2FA is not enforced on sites where Two Factor is inactive. Install and network-activate Two Factor to close the gap.', 'force-email-two-factor' ),
+			esc_html( force_2fa_dependency_action_body( $installed, true ) ),
 			esc_url( $install_url ),
-			esc_html__( 'Install & network-activate Two Factor', 'force-email-two-factor' ),
+			esc_html( force_2fa_dependency_action_label( $installed, true ) ),
 			esc_url( 'https://wordpress.org/plugins/two-factor/' ),
 			esc_html__( 'Learn more', 'force-email-two-factor' )
 		);
@@ -790,6 +958,22 @@ function force_2fa_handle_install_two_factor() {
 		if ( is_wp_error( $result ) ) {
 			wp_die( esc_html( $result->get_error_message() ) );
 		}
+		if ( true !== $result ) {
+			wp_die( esc_html__( 'Two Factor could not be installed.', 'force-email-two-factor' ) );
+		}
+
+		// Activate the exact plugin file the upgrader just installed. This avoids
+		// validating a stale/hard-coded plugin path if the install destination differs
+		// or WordPress has a cached plugin inventory from earlier in the request.
+		wp_clean_plugins_cache( true );
+		clearstatcache();
+
+		$installed_plugin_file = $upgrader->plugin_info();
+		if ( ! is_string( $installed_plugin_file ) || '' === $installed_plugin_file ) {
+			wp_die( esc_html__( 'Two Factor was installed, but WordPress could not identify its main plugin file.', 'force-email-two-factor' ) );
+		}
+
+		$plugin_file = $installed_plugin_file;
 	}
 
 	$activated = activate_plugin( $plugin_file, '', $network );
@@ -799,6 +983,66 @@ function force_2fa_handle_install_two_factor() {
 
 	wp_safe_redirect( $network ? network_admin_url( 'plugins.php' ) : admin_url( 'plugins.php' ) );
 	exit;
+}
+
+/**
+ * Keep the dependency notice honest when Two Factor is deleted via the AJAX "Delete".
+ *
+ * WordPress deletes plugins over AJAX without reloading the page, so the
+ * server-rendered dependency notice would keep its pre-delete copy ("installed but
+ * not active") until the next page load. Activate/Deactivate from the list reload
+ * the page themselves, so only delete needs this. Rather than force a full reload —
+ * which triggers the browser's "reload site?" prompt and jumps the scroll position —
+ * this updates the notice's copy in place (to the now-absent wording) and scrolls it
+ * into view, using WordPress's own 'wp-plugin-delete-success' event. Works for both
+ * the single-site notice and the Network Admin notice — the wording it hands the
+ * browser follows is_network_admin() so it never disagrees with the PHP-rendered
+ * notice. The button's action is unchanged: it self-heals, installing Two Factor
+ * first when absent. Enqueued only on plugins.php; a viewer there already holds
+ * activate_plugins.
+ *
+ * @param string $hook The current admin page's hook suffix.
+ */
+function force_2fa_enqueue_notice_refresh( $hook ) {
+	if ( 'plugins.php' !== $hook ) {
+		return;
+	}
+
+	// Network Admin repaints the network notice ("Install & network-activate");
+	// a single-site plugins.php repaints its own ("Install & activate"). Match the
+	// screen so JS and the server-rendered PHP notice never disagree.
+	$network = is_network_admin();
+
+	// The exact copy the notice should show once Two Factor is gone — same source
+	// the PHP notice uses, so JS and PHP never drift. canInstall reflects whether the
+	// current user can complete the install path: an already-installed Two Factor only
+	// needs the activate cap to show a button, but once deleted the action needs
+	// install_plugins. A user without it must not be handed an "Install & activate"
+	// button that only hits the handler's permission wall — reload instead so the
+	// server renders the correct non-actionable notice.
+	wp_localize_script(
+		'updates',
+		'force2faDependencyNotice',
+		array(
+			'body'       => force_2fa_dependency_action_body( false, $network ),
+			'label'      => force_2fa_dependency_action_label( false, $network ),
+			'canInstall' => current_user_can( 'install_plugins' ),
+		)
+	);
+
+	wp_add_inline_script(
+		'updates',
+		'jQuery(document).on("wp-plugin-delete-success",function(e,r){'
+		. 'if(!r||("two-factor"!==r.slug&&!(r.plugin&&0===r.plugin.indexOf("two-factor/"))))return;'
+		. 'var n=document.querySelector(".force-2fa-dep-notice");'
+		. 'if(!n||"undefined"===typeof force2faDependencyNotice)return;'
+		. 'if(!force2faDependencyNotice.canInstall){window.location.reload();return;}'
+		. 'var b=n.querySelector(".force-2fa-dep-body"),a=n.querySelector(".force-2fa-dep-action");'
+		. 'if(b)b.textContent=force2faDependencyNotice.body;'
+		. 'if(a)a.textContent=force2faDependencyNotice.label;'
+		. 'n.scrollIntoView({behavior:"smooth",block:"start"});'
+		. '});'
+	);
 }
 // @codeCoverageIgnoreEnd
 
@@ -1111,6 +1355,10 @@ function force_2fa_register_hooks() {
 	add_action( 'admin_notices', 'force_2fa_dependency_notice' );
 	add_action( 'network_admin_notices', 'force_2fa_network_dependency_notice' );
 	add_action( 'admin_post_force_2fa_install_two_factor', 'force_2fa_handle_install_two_factor' );
+
+	// Keep the dependency notice honest after an AJAX plugin delete (see the
+	// function docblock): reload the Plugins screen when Two Factor is deleted.
+	add_action( 'admin_enqueue_scripts', 'force_2fa_enqueue_notice_refresh' );
 
 	// Site Health: report the self-update posture (Tools → Site Health) instead of a
 	// nagging notice when the updater isn't running.

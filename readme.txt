@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.10.0
+Stable tag: 1.10.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -187,6 +187,30 @@ only allowlisted accounts using Application Passwords can skip the interactive
 challenge.
 
 == Changelog ==
+
+= 1.10.1 =
+* Admin UX: the dependency notice and its one-click button now reflect whether the
+  Two Factor plugin is missing versus installed-but-inactive. When it is already
+  installed, the button reads **Activate Two Factor** (or **Network-activate Two
+  Factor** on multisite) and the copy says "installed but not active" rather than
+  always offering to install it. The multisite per-site heads-up notice is likewise
+  accurate about installed-but-inactive versus not installed. And when Two Factor is
+  active but its Email provider has been removed (e.g. via the `two_factor_providers`
+  filter), the notice says the provider must be restored instead of offering an
+  Activate button that would do nothing. On multisite this restore-the-provider
+  warning now also appears on the **Network Admin** plugins screen when Two Factor is
+  network-active but its Email provider is unavailable — otherwise that gap (2FA
+  silently not enforced network-wide) was only visible on individual site screens.
+* Admin UX: after deleting Two Factor via the Plugins screen's AJAX "Delete" link,
+  the dependency notice updates its copy in place — and scrolls into view — instead
+  of showing stale pre-delete text, with no jarring full-page reload. This works on
+  both the single-site notice and the **Network Admin** notice, and the repainted
+  copy follows the screen: **Install & network-activate Two Factor** in Network
+  Admin, **Install & activate Two Factor** on a single site — so the button never
+  offers to activate a plugin that is no longer installed. If the current user can
+  activate but not install plugins, the notice reloads (rendering the correct
+  non-actionable message) rather than showing an install button they can't use.
+  (The plugin's first, tiny admin script, loaded only on the Plugins screen.)
 
 = 1.10.0 =
 * Deployment: new `FORCE_2FA_DISABLE_SELF_UPDATE` constant (and

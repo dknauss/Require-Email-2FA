@@ -64,6 +64,34 @@ function __( $text, $domain = 'default' ) { // phpcs:ignore WordPress.NamingConv
 	return $text;
 }
 
+// Script-enqueue stubs for the AJAX-delete notice-refresh glue: record what the
+// plugin localizes/injects so a test can assert the wording it hands the browser.
+function wp_localize_script( $handle, $object_name, $l10n ) {
+	$GLOBALS['__force2fa_localized'][ $object_name ] = $l10n;
+	return true;
+}
+
+function wp_add_inline_script( $handle, $data, $position = 'after' ) {
+	$GLOBALS['__force2fa_inline_scripts'][] = $data;
+	return true;
+}
+
+// Whether the current request is a Network Admin screen. Driven by a global so a
+// test can render the refresh script in either the network or single-site context.
+function is_network_admin() {
+	return ! empty( $GLOBALS['__force2fa_is_network_admin'] );
+}
+
+// Current-user capability check. Defaults to a fully-capable admin (every cap); a
+// test can set $GLOBALS['__force2fa_user_caps'] to the exact caps the user holds
+// to exercise a capability-limited role (e.g. can activate but not install).
+function current_user_can( $cap ) {
+	if ( isset( $GLOBALS['__force2fa_user_caps'] ) ) {
+		return in_array( $cap, $GLOBALS['__force2fa_user_caps'], true );
+	}
+	return true;
+}
+
 // --- WordPress class stubs ----------------------------------------------------
 
 if ( ! class_exists( 'WP_User' ) ) {
