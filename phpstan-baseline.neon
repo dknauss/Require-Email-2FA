@@ -1,0 +1,25 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Call to an undefined method YahnisElsts\\PluginUpdateChecker\\v5p7\\Vcs\\Api\:\:enableReleaseAssets\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: force-email-two-factor.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: force-email-two-factor.php
+
+		-
+			message: '#^Call to function is_scalar\(\) with int\|string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: force-email-two-factor.php
+
+		-
+			message: '#^Cannot access property \$download_link on array\|object\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: force-email-two-factor.php
