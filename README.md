@@ -124,6 +124,9 @@ Before enabling enforcement on a production site:
       for multisite-wide enforcement, or the optional `mu-loader.php`.
 - [ ] Identify any REST/XML-RPC service accounts up front and decide whether each
       one should be allowlisted for Application Password authentication.
+- [ ] If the site uses SSO/SAML/OIDC/OAuth/LDAP/Jetpack SSO, test both the SSO
+      callback and the direct `wp-login.php` path on staging. Do not assume this
+      plugin enforces MFA for SSO; enforce MFA at the identity provider.
 - [ ] Document the `FORCE_2FA_DISABLE` kill switch in your incident runbook.
 
 ---
@@ -366,6 +369,9 @@ does nothing else.
   Two Factor's hooks. A competing 2FA plugin also does **not** satisfy this
   dependency: without the actual Two Factor plugin active, this plugin stays a
   no-op and keeps prompting you to install it.
+
+> [!WARNING]
+> **SSO is a separate authentication boundary.** This plugin is not an SSO MFA enforcement layer. It enforces through the Two Factor plugin's normal WordPress login and API-login hooks. Some SSO plugins (SAML, OIDC/OAuth, LDAP, Jetpack SSO, etc.) can bypass the local login challenge; others may trigger a second local Two Factor prompt or conflict with the SSO callback. If SSO is your primary login path, enforce MFA at the identity provider, test both SSO and direct `wp-login.php` on staging, and keep a break-glass administrator account with known-good local access and backup codes.
 
 > [!CAUTION]
 > **Don't run two 2FA enforcement stacks at once.** If both Two Factor (with this plugin) and a separate 2FA plugin gate the login flow, you risk double prompts or lockouts. Pick one stack; this plugin assumes that stack is Two Factor.

@@ -87,6 +87,8 @@ Before production activation:
 * Test one non-admin login before broad rollout.
 * Choose the right activation mode: single-site, Network Activate, or `mu-loader.php`.
 * Identify REST/XML-RPC service accounts and decide whether they need allowlisting.
+* If the site uses SSO/SAML/OIDC/OAuth/LDAP/Jetpack SSO, test both SSO and direct
+  `wp-login.php` on staging; enforce MFA at the identity provider.
 * Document the `FORCE_2FA_DISABLE` kill switch in your incident runbook.
 
 == Frequently Asked Questions ==
@@ -143,6 +145,17 @@ add_filter( 'force_2fa_api_login_allowlist', function () {
 } );
 `
 
+= Can I use this with SSO, SAML, OAuth, OIDC, LDAP, or Jetpack SSO? =
+
+Use caution. This plugin enforces email 2FA through the Two Factor plugin's normal
+WordPress login and API-login hooks; it is not an SSO MFA enforcement layer. Some
+SSO plugins bypass the normal local login challenge, while others may trigger a
+second local Two Factor prompt or conflict with the SSO callback.
+
+If SSO is your primary login path, enforce MFA at the identity provider, test both
+SSO and direct `wp-login.php` paths on staging, and keep a break-glass administrator
+account with known-good local access and backup codes.
+
 = How does it work on multisite? =
 
 It is network-only: you must Network Activate it, and per-site activation is
@@ -195,11 +208,11 @@ configured stays in place and remains their primary method.
 Mail delivery is part of the security boundary; if outbound email fails, users
 without a stronger factor can be locked out until mail is fixed or
 `FORCE_2FA_DISABLE` is enabled. This plugin only enforces the Two Factor plugin
-and does not integrate with other 2FA plugins. On multisite it is network-only
-(per-site activation is blocked); a true network-wide guarantee also depends on
-Two Factor itself being network-active. API bypasses are intentionally narrow:
-only allowlisted accounts using Application Passwords can skip the interactive
-challenge.
+and does not integrate with other 2FA plugins or enforce MFA inside external SSO
+providers. On multisite it is network-only (per-site activation is blocked); a true
+network-wide guarantee also depends on Two Factor itself being network-active. API
+bypasses are intentionally narrow: only allowlisted accounts using Application
+Passwords can skip the interactive challenge.
 
 == Changelog ==
 
