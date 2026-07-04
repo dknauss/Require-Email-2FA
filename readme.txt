@@ -176,8 +176,10 @@ Updates install from GitHub Releases with no WordPress.org review gate, so the
 release-publishing path is the plugin's trust boundary — a published release runs
 on every site that auto-updates. The pipeline is hardened: the updater is vendored,
 Actions are pinned to commit SHAs, the build is a reproducible `git archive`, only
-the reviewed release asset installs, and each release carries a build-provenance
-attestation and a SHA-256 checksum you can verify. If you fork the plugin to serve
+the reviewed release asset installs, and each release carries a SHA-256 checksum you
+can verify (plus a build-provenance attestation on public repositories; private
+Free/Pro/Team forks are checksum-only, as attestations need GitHub Enterprise Cloud).
+If you fork the plugin to serve
 your own sites, point the `Update URI` header at your own repository and re-apply
 the repository protections. Full guide — GitHub settings, artifact verification,
 safe forking, incident response — in `docs/SUPPLY-CHAIN-SECURITY.md`:

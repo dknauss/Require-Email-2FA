@@ -293,7 +293,8 @@ The plugin checks this constant at load time and registers nothing when it's set
   > `vendor/yahnis-elsts/`, so the exact updater bytes are in-repo and Packagist is
   > not resolved at release time), workflow **Actions are pinned to full commit
   > SHAs** (a moved tag can't inject code into the `contents: write` job), and the
-  > release token requests only `contents: write`. Keep branch protection on the
+  > release token requests only `contents: write` plus the `id-token`/`attestations`
+  > write scopes for build provenance. Keep branch protection on the
   > tag/release path and review any change to the release workflow, its actions, or
   > the vendored updater. Full hardening guide — GitHub settings, artifact
   > provenance/checksums, safe forking, incident response — in

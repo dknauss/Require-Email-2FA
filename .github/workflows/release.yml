@@ -52,7 +52,7 @@ jobs:
       - name: Verify the tag points at a reviewed commit on the default branch
         run: |
           # The tag ruleset controls WHO can push a v* tag, not WHAT it points at, and
-          # the build below archives HEAD. Refuse to release a commit that never went
+          # the build below archives this commit. Refuse to release a commit that never went
           # through PR + CODEOWNERS review on the default branch — otherwise a
           # tag-authorized (or compromised) account could ship unreviewed code by
           # tagging an arbitrary commit directly.
@@ -95,7 +95,12 @@ jobs:
           # git archive honours .gitattributes export-ignore (strips tests/,
           # .github/, composer.* etc.) and includes the committed vendored updater
           # under vendor/yahnis-elsts/. No Composer step is needed.
-          git archive --format=zip --prefix="${PLUGIN_SLUG}/" -o "${PLUGIN_SLUG}.zip" HEAD
+          #
+          # Archive the exact commit the ancestry/version gates verified —
+          # ${GITHUB_SHA}, not HEAD — so an intervening step (a composer plugin,
+          # a stray checkout) that moved HEAD can't ship a different tree than the
+          # one that passed review.
+          git archive --format=zip --prefix="${PLUGIN_SLUG}/" -o "${PLUGIN_SLUG}.zip" "${GITHUB_SHA}"
           echo "Zip contents (tail):"
           unzip -l "${PLUGIN_SLUG}.zip" | tail -n 20
           # Fail loudly if the updater did not make it into the payload.
@@ -133,8 +138,13 @@ jobs:
               --generate-notes
           fi
 
-          # Append verification instructions to the release notes.
+          # Append verification instructions to the release notes. On a rerun the
+          # body may already contain our block (this job supports existing releases
+          # via --clobber), so strip any prior block and trailing blanks first — never
+          # stack duplicate verification sections in the public notes.
           gh release view "${tag}" --json body --jq .body > notes.md
+          sed -i '/^## Verify this release$/,$d' notes.md
+          perl -0pi -e 's/\s+\z/\n/' notes.md
           {
             echo
             echo "## Verify this release"
