@@ -183,17 +183,27 @@ function force_2fa_should_nag_network( $self_network_active, $dependency_met_net
  * filter removed Two_Factor_Email: enforcement silently no-ops network-wide while the
  * "network activation" gate reports the dependency met. This surfaces that gap on the
  * network plugins page (no button — activation cannot fix a missing provider; it must
- * be restored). Pure decision, unit-tested; $dependency_state comes from
- * force_2fa_dependency_state(), which is only 'unusable' when Two Factor is loaded but
- * the dependency is unmet.
+ * be restored).
+ *
+ * Gated on $dependency_met_network (Two Factor actually network-active): when Two
+ * Factor is only site-active on the main site, Two_Factor_Core still loads in Network
+ * Admin and the state would read 'unusable', but the real fix there is to
+ * network-activate Two Factor — so we defer to the network-activation nag instead of
+ * pre-empting it with a no-button warning. Pure decision, unit-tested; $dependency_state
+ * comes from force_2fa_dependency_state(), which is only 'unusable' when Two Factor is
+ * loaded but the dependency is unmet.
  *
  * @param bool   $self_network_active     Whether Require Email 2FA is network-active.
  * @param bool   $user_can_manage_network Whether the user can manage network plugins.
+ * @param bool   $dependency_met_network  Whether Two Factor is network-active.
  * @param string $dependency_state        force_2fa_dependency_state() result.
  * @return bool True if the network unusable-provider warning should render.
  */
-function force_2fa_should_warn_network_unusable( $self_network_active, $user_can_manage_network, $dependency_state ) {
-	return (bool) $self_network_active && (bool) $user_can_manage_network && 'unusable' === $dependency_state;
+function force_2fa_should_warn_network_unusable( $self_network_active, $user_can_manage_network, $dependency_met_network, $dependency_state ) {
+	return (bool) $self_network_active
+		&& (bool) $user_can_manage_network
+		&& (bool) $dependency_met_network
+		&& 'unusable' === $dependency_state;
 }
 
 /**
@@ -808,19 +818,21 @@ function force_2fa_dependency_met_network() {
  * + NETWORK-activate of Two Factor so the super admin closes the gap in one place.
  */
 function force_2fa_network_dependency_notice() {
-	$self_network_active = force_2fa_self_network_active();
-	$can_manage_network  = current_user_can( 'manage_network_plugins' );
+	$self_network_active    = force_2fa_self_network_active();
+	$can_manage_network     = current_user_can( 'manage_network_plugins' );
+	$dependency_met_network = force_2fa_dependency_met_network();
 
 	// Two Factor is network-active but its Email provider is gone: network activation
 	// reports the dependency "met", yet enforcement no-ops on every site. Activation
 	// can't fix it, so warn (no button) to restore the provider — the network-wide
-	// counterpart to the per-site "unusable" heads-up.
+	// counterpart to the per-site "unusable" heads-up. Only when Two Factor is actually
+	// network-active; a site-active-only main site defers to the network-activation nag.
 	if ( ! force_2fa_dependency_met() ) {
 		$state = force_2fa_dependency_state(
 			file_exists( WP_PLUGIN_DIR . '/' . FORCE_2FA_TWO_FACTOR_PLUGIN_FILE ),
 			class_exists( 'Two_Factor_Core' )
 		);
-		if ( force_2fa_should_warn_network_unusable( $self_network_active, $can_manage_network, $state ) ) {
+		if ( force_2fa_should_warn_network_unusable( $self_network_active, $can_manage_network, $dependency_met_network, $state ) ) {
 			printf(
 				'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
 				esc_html__( 'The Require Email 2FA plugin is not enforcing email 2FA network-wide.', 'force-email-two-factor' ),
@@ -832,7 +844,7 @@ function force_2fa_network_dependency_notice() {
 
 	if ( ! force_2fa_should_nag_network(
 		$self_network_active,
-		force_2fa_dependency_met_network(),
+		$dependency_met_network,
 		$can_manage_network
 	) ) {
 		return;

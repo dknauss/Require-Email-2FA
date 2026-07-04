@@ -274,20 +274,27 @@ final class DependencyCheckTest extends TestCase {
 
 	// --- Network Admin warns when Two Factor is active but its Email provider is gone ---
 
-	public function test_warn_network_unusable_when_self_active_user_can_manage_and_unusable(): void {
-		$this->assertTrue( force_2fa_should_warn_network_unusable( true, true, 'unusable' ) );
+	public function test_warn_network_unusable_when_network_active_can_manage_and_unusable(): void {
+		$this->assertTrue( force_2fa_should_warn_network_unusable( true, true, true, 'unusable' ) );
+	}
+
+	public function test_no_network_unusable_warning_when_two_factor_not_network_active(): void {
+		// Two Factor only site-active on the main site: Two_Factor_Core loads in Network
+		// Admin so the state reads 'unusable', but the real fix is to network-activate —
+		// defer to the network-activation nag, don't pre-empt it with a no-button warning.
+		$this->assertFalse( force_2fa_should_warn_network_unusable( true, true, false, 'unusable' ) );
 	}
 
 	public function test_no_network_unusable_warning_when_state_is_not_unusable(): void {
-		$this->assertFalse( force_2fa_should_warn_network_unusable( true, true, 'inactive' ) );
-		$this->assertFalse( force_2fa_should_warn_network_unusable( true, true, 'absent' ) );
+		$this->assertFalse( force_2fa_should_warn_network_unusable( true, true, true, 'inactive' ) );
+		$this->assertFalse( force_2fa_should_warn_network_unusable( true, true, true, 'absent' ) );
 	}
 
 	public function test_no_network_unusable_warning_when_self_not_network_active(): void {
-		$this->assertFalse( force_2fa_should_warn_network_unusable( false, true, 'unusable' ) );
+		$this->assertFalse( force_2fa_should_warn_network_unusable( false, true, true, 'unusable' ) );
 	}
 
 	public function test_no_network_unusable_warning_when_user_cannot_manage_network(): void {
-		$this->assertFalse( force_2fa_should_warn_network_unusable( true, false, 'unusable' ) );
+		$this->assertFalse( force_2fa_should_warn_network_unusable( true, false, true, 'unusable' ) );
 	}
 }
