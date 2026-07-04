@@ -27,3 +27,7 @@ Use GitHub's private vulnerability reporting for this repository if available. I
 ## Security scope notes
 
 This plugin enforces policy through the WordPress.org [Two Factor](https://wordpress.org/plugins/two-factor/) plugin. Reports are most useful when they identify behavior in this plugin's enforcement, exemption, API-login allowlist, kill-switch, or multisite activation logic.
+
+## Supply-chain security
+
+Updates install straight from GitHub Releases with no WordPress.org review gate, so the release-publishing path is this plugin's trust boundary: a published release runs network-active on every site that auto-updates. The release pipeline, the GitHub repository settings that protect it, how to verify a release artifact (checksum + build-provenance attestation), and how to fork safely are documented in [docs/SUPPLY-CHAIN-SECURITY.md](docs/SUPPLY-CHAIN-SECURITY.md). Maintainers and forks should apply that hardening checklist.

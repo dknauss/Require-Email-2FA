@@ -295,13 +295,18 @@ The plugin checks this constant at load time and registers nothing when it's set
   > SHAs** (a moved tag can't inject code into the `contents: write` job), and the
   > release token requests only `contents: write`. Keep branch protection on the
   > tag/release path and review any change to the release workflow, its actions, or
-  > the vendored updater.
+  > the vendored updater. Full hardening guide — GitHub settings, artifact
+  > provenance/checksums, safe forking, incident response — in
+  > [`docs/SUPPLY-CHAIN-SECURITY.md`](docs/SUPPLY-CHAIN-SECURITY.md).
 
 - **Forking:** point the `Update URI` header at your own repository — that single
   change redirects both the updater and core's update-ownership to your fork.
   (Leaving it on the upstream repo would auto-update every site back to upstream.)
   The slug and download-asset name derive from the plugin folder, so only a rename
-  additionally needs the workflow's `PLUGIN_SLUG` updated to match.
+  additionally needs the workflow's `PLUGIN_SLUG` updated to match. A fork inherits
+  none of the upstream repo's branch/tag protection — re-apply it, and never embed a
+  broad token for a private update repo (see
+  [`docs/SUPPLY-CHAIN-SECURITY.md`](docs/SUPPLY-CHAIN-SECURITY.md#4-forking-safely)).
 
 - **Fleet deployment (managed vs. standalone):** the self-updater is on by default
   (standalone sites patch themselves from GitHub Releases). On sites patched by a
@@ -402,6 +407,9 @@ does nothing else.
 - See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, test commands, and pull request expectations.
 - See [SUPPORT.md](SUPPORT.md) for support boundaries and the information needed in bug reports.
 - See [SECURITY.md](SECURITY.md) to report vulnerabilities privately.
+- See [docs/SUPPLY-CHAIN-SECURITY.md](docs/SUPPLY-CHAIN-SECURITY.md) for the release
+  trust boundary, the GitHub settings that protect the update repository, how to
+  verify release artifacts, and safe-fork guidance.
 - This project follows a [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ---

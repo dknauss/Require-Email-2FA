@@ -1,0 +1,32 @@
+# Code owners for the high-risk paths.
+#
+# This plugin auto-updates from GitHub Releases with no WordPress.org review gate,
+# so the release pipeline is its trust boundary: whatever ships as a release asset
+# runs network-active, on every request, on every site that auto-updates. The paths
+# below are the ones that can influence what ships or what executes; changes to them
+# should get a maintainer's review.
+#
+# Enforcement: turn on "Require review from Code Owners" in the default-branch
+# ruleset (see docs/SUPPLY-CHAIN-SECURITY.md). CODEOWNERS only lists the sensitive
+# paths — not "*" — so routine doc/test changes are not gated, and a solo maintainer
+# is not blocked from merging their own unrelated PRs.
+#
+# Forks: replace @dknauss with your own maintainer handle or team (e.g. @your-org/maintainers).
+
+# The plugin's executable surface.
+/force-email-two-factor.php   @dknauss
+/mu-loader.php                @dknauss
+
+# The release/CI pipeline and every Action it trusts.
+/.github/                     @dknauss
+
+# The vendored auto-updater — these bytes ship as the update payload.
+/vendor/                      @dknauss
+
+# What the release build includes/excludes and the quality/security gates.
+/.gitattributes               @dknauss
+/phpcs.xml.dist               @dknauss
+/phpstan.neon.dist            @dknauss
+/phpstan/                     @dknauss
+/composer.json                @dknauss
+/composer.lock                @dknauss

@@ -170,6 +170,19 @@ Your management layer then delivers updates, and enforcement is unchanged. A
 **Tools &rarr; Site Health** check reports each site's update posture. See
 `docs/DEPLOYMENT.md` for the managed-vs-standalone deployment guide.
 
+= Where do updates come from, and is the supply chain hardened? =
+
+Updates install from GitHub Releases with no WordPress.org review gate, so the
+release-publishing path is the plugin's trust boundary — a published release runs
+on every site that auto-updates. The pipeline is hardened: the updater is vendored,
+Actions are pinned to commit SHAs, the build is a reproducible `git archive`, only
+the reviewed release asset installs, and each release carries a build-provenance
+attestation and a SHA-256 checksum you can verify. If you fork the plugin to serve
+your own sites, point the `Update URI` header at your own repository and re-apply
+the repository protections. Full guide — GitHub settings, artifact verification,
+safe forking, incident response — in `docs/SUPPLY-CHAIN-SECURITY.md`:
+https://github.com/dknauss/Require-Email-2FA/blob/main/docs/SUPPLY-CHAIN-SECURITY.md
+
 = Does this remove a user's authenticator app or hardware key? =
 
 No. It appends the Email provider as a floor; any stronger factor the user
