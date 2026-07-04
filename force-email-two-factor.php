@@ -929,6 +929,30 @@ function force_2fa_handle_install_two_factor() {
 	wp_safe_redirect( $network ? network_admin_url( 'plugins.php' ) : admin_url( 'plugins.php' ) );
 	exit;
 }
+
+/**
+ * Reload the Plugins screen when Two Factor is deleted via the AJAX "Delete" link.
+ *
+ * WordPress deletes plugins over AJAX without reloading the page, so the
+ * server-rendered dependency notice would keep showing its pre-delete copy
+ * ("installed but not active") until the next page load. Activate/Deactivate from
+ * the list reload the page themselves, so only delete needs this. Hooks WordPress's
+ * own 'wp-plugin-delete-success' event (fired by wp.updates in updates.js) and
+ * reloads so the notice re-renders with the correct now-absent copy. Enqueued only
+ * on plugins.php; a viewer there already holds activate_plugins.
+ *
+ * @param string $hook The current admin page's hook suffix.
+ */
+function force_2fa_enqueue_notice_refresh( $hook ) {
+	if ( 'plugins.php' !== $hook ) {
+		return;
+	}
+
+	wp_add_inline_script(
+		'updates',
+		'jQuery(document).on("wp-plugin-delete-success",function(e,r){if(r&&("two-factor"===r.slug||(r.plugin&&0===r.plugin.indexOf("two-factor/")))){window.location.reload();}});'
+	);
+}
 // @codeCoverageIgnoreEnd
 
 /**
@@ -1240,6 +1264,10 @@ function force_2fa_register_hooks() {
 	add_action( 'admin_notices', 'force_2fa_dependency_notice' );
 	add_action( 'network_admin_notices', 'force_2fa_network_dependency_notice' );
 	add_action( 'admin_post_force_2fa_install_two_factor', 'force_2fa_handle_install_two_factor' );
+
+	// Keep the dependency notice honest after an AJAX plugin delete (see the
+	// function docblock): reload the Plugins screen when Two Factor is deleted.
+	add_action( 'admin_enqueue_scripts', 'force_2fa_enqueue_notice_refresh' );
 
 	// Site Health: report the self-update posture (Tools → Site Health) instead of a
 	// nagging notice when the updater isn't running.

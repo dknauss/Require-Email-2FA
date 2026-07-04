@@ -69,6 +69,21 @@ final class DependencyCheckTest extends TestCase {
 		$this->assertContains( 'network_admin_notices', $tags );
 	}
 
+	public function test_register_hooks_wires_the_notice_refresh_script(): void {
+		$GLOBALS['__force2fa_added_actions'] = array();
+		force_2fa_register_hooks();
+
+		$found = false;
+		foreach ( $GLOBALS['__force2fa_added_actions'] as $registration ) {
+			if ( 'admin_enqueue_scripts' === $registration[0]
+				&& 'force_2fa_enqueue_notice_refresh' === $registration[1] ) {
+				$found = true;
+			}
+		}
+
+		$this->assertTrue( $found, 'The dependency-notice refresh script must be enqueued on admin_enqueue_scripts.' );
+	}
+
 	public function test_should_nag_network_when_self_network_active_and_dep_missing(): void {
 		// Require Email 2FA is network-active but Two Factor is not network-active,
 		// and the super admin can act → the network-admin notice should show.

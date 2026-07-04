@@ -198,6 +198,10 @@ challenge.
   active but its Email provider has been removed (e.g. via the `two_factor_providers`
   filter), the notice says the provider must be restored instead of offering an
   Activate button that would do nothing.
+* Admin UX: after deleting Two Factor via the Plugins screen's AJAX "Delete" link,
+  the page reloads so the dependency notice re-renders with the correct copy
+  instead of the stale pre-delete text. (The plugin's first, tiny admin script,
+  loaded only on the Plugins screen.)
 
 = 1.10.0 =
 * Deployment: new `FORCE_2FA_DISABLE_SELF_UPDATE` constant (and
