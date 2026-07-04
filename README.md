@@ -431,7 +431,7 @@ Tests run on a zero-dependency stub bootstrap (no WordPress install required):
 ```sh
 composer install
 composer test                       # PHPUnit: unit + integration
-composer phpcs                      # PHPCompatibility (7.2+) + WordPress-Extra
+composer phpcs                      # PHPCompatibility (7.2+) + WordPress (full)
 composer phpcbf                     # auto-fix coding-standards issues
 composer check                      # phpcs + tests
 vendor/bin/phpunit --testsuite integration   # one suite
@@ -440,9 +440,12 @@ bash bin/multisite-e2e.sh           # disposable real multisite, network-only gu
 bash bin/update-e2e.sh              # disposable real site, GitHub Release update path
 ```
 
-Coding standards are **WordPress-Extra** (style + security sniffs) plus
-**PHPCompatibility** with `testVersion 7.2-`, scoped to the production files
-(`phpcs.xml.dist`).
+Coding standards are the full **WordPress** standard — Core + Extra + Docs (style,
+security, and documentation sniffs) — plus **PHPCompatibility** with
+`testVersion 7.2-`, scoped to the production files (`phpcs.xml.dist`). The one
+excluded sub-rule (`InlineComment.InvalidEndChar`) is documented inline in the
+ruleset; it conflicts with tool directives (`@codeCoverageIgnore`, `phpcs:`) and the
+intentional commented-out example config.
 
 CI ([GitHub Actions](.github/workflows/ci.yml)) runs on every push and pull
 request:

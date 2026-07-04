@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <ruleset name="force-email-two-factor">
-    <description>PHP cross-version compatibility check for the production plugin code.</description>
+    <description>WordPress coding standards (full) + PHP cross-version compatibility for the production plugin code.</description>
 
     <!-- Production files only — dev/test code may use newer syntax. -->
     <file>force-email-two-factor.php</file>
@@ -16,9 +16,17 @@
     <config name="testVersion" value="7.2-"/>
     <rule ref="PHPCompatibility"/>
 
-    <!-- WordPress coding standards: style + security best practices. -->
+    <!-- Full WordPress coding standards: Core + Extra + Docs — style, security,
+         and documentation rigor. (Directory/.org-submission rules live in the
+         Plugin Check tool, not here; this plugin is distributed from GitHub.) -->
     <config name="minimum_wp_version" value="6.5"/>
-    <rule ref="WordPress-Extra"/>
+    <rule ref="WordPress">
+        <!-- "Inline comments must end in a full stop" fights directives and
+             intentional examples that are not sentences: PHPUnit @codeCoverageIgnore
+             annotations, phpcs: directives, and the commented-out opt-in example
+             config. Every other documentation sniff still applies. -->
+        <exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
+    </rule>
 
     <!-- Validate that translatable strings use the plugin's text domain. -->
     <config name="text_domain" value="force-email-two-factor"/>

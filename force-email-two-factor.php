@@ -12,6 +12,8 @@
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:      force-email-two-factor
  *
+ * @package Force_Email_Two_Factor
+ *
  * Soft dependency: the Two Factor plugin (slug "two-factor"). This plugin
  * activates on its own and then no-ops safely until Two Factor is active — every
  * enforcement guard below bails via force_2fa_dependency_met(). While Two Factor
@@ -178,7 +180,7 @@ function force_2fa_should_nag_network( $self_network_active, $dependency_met_net
 /**
  * Whether the Network Admin should warn that Two Factor is active but unusable.
  *
- * force_2fa_should_nag_network() only fires when Two Factor is NOT network-active,
+ * The force_2fa_should_nag_network() gate only fires when Two Factor is NOT network-active,
  * so it misses the case where Two Factor IS network-active but a two_factor_providers
  * filter removed Two_Factor_Email: enforcement silently no-ops network-wide while the
  * "network activation" gate reports the dependency met. This surfaces that gap on the
