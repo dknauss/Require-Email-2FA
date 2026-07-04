@@ -169,14 +169,22 @@ independent integrity signals plus a reproducibility path:
    ```sh
    gh attestation verify force-email-two-factor.zip \
      --repo <owner>/<repo> \
-     --signer-workflow <owner>/<repo>/.github/workflows/release.yml
+     --signer-workflow <owner>/<repo>/.github/workflows/release.yml \
+     --source-ref refs/tags/vX.Y.Z
    ```
 
-   > **Private forks:** GitHub artifact attestations require GitHub Enterprise Cloud
-   > on private/internal repositories. The workflow gates this step on public
-   > visibility, so a private fork on Free/Pro/Team still publishes (checksum +
-   > reproducible-build verification apply) but without a provenance attestation.
-   > Keep the update repo **public**, or use Enterprise Cloud, to get provenance.
+   `--signer-workflow` rejects provenance produced by any *other* workflow in the
+   repo; `--source-ref` rejects an artifact built from any tag other than the one you
+   are verifying. Together they bind the check to *this workflow, this release* — not
+   merely the repo's identity. (The command the workflow writes into the release notes
+   fills in the concrete repo and tag for you.)
+
+   > **Private forks:** the workflow attempts the attestation on every repo and
+   > tolerates failure (`continue-on-error`), so it never blocks a release. GitHub
+   > artifact attestations work on public repos and on private/internal repos on
+   > **GitHub Enterprise Cloud**; on a private Free/Pro/Team repo the step fails
+   > harmlessly and the release publishes checksum-only (the notes omit the provenance
+   > line). Keep the update repo **public**, or use Enterprise Cloud, to get provenance.
 
 3. **Reproducible from source.** Because the build is `git archive` of the tag, the
    zip's contents equal the reviewed tree. Rebuild and diff the *contents* (zip
