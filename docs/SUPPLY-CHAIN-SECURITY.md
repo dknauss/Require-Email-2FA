@@ -309,4 +309,9 @@ proxy, or drive patching centrally (see [DEPLOYMENT.md](DEPLOYMENT.md) and the
 - [ ] `Update URI` points at the fork.
 - [ ] `PLUGIN_SLUG` matches the installed folder name.
 - [ ] Fork's own rulesets, environment, and `CODEOWNERS` configured.
+      **Heads-up:** a fork does not inherit the `release` environment, so until you
+      add it with required reviewers, the fork's **first release publishes without
+      pausing for approval** (GitHub auto-creates an unprotected environment and runs
+      the job through). Environment required reviewers also need a public repo or
+      GitHub Team/Enterprise — a private Free/Pro fork cannot gate the release.
 - [ ] No broad token embedded for a private update repo.
