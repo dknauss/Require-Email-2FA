@@ -312,6 +312,7 @@ proxy, or drive patching centrally (see [DEPLOYMENT.md](DEPLOYMENT.md) and the
       **Heads-up:** a fork does not inherit the `release` environment, so until you
       add it with required reviewers, the fork's **first release publishes without
       pausing for approval** (GitHub auto-creates an unprotected environment and runs
-      the job through). Environment required reviewers also need a public repo or
-      GitHub Team/Enterprise — a private Free/Pro fork cannot gate the release.
+      the job through). Environment required reviewers work on a **public** repo on
+      any plan; on a **private/internal** repo they require **GitHub Enterprise** — so
+      a private Free, Pro, *or* Team fork cannot gate the release at all.
 - [ ] No broad token embedded for a private update repo.
