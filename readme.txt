@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.10.1
+Stable tag: 1.10.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -215,6 +215,17 @@ bypasses are intentionally narrow: only allowlisted accounts using Application
 Passwords can skip the interactive challenge.
 
 == Changelog ==
+
+= 1.10.2 =
+* Docs: clarified that this plugin enforces through the Two Factor plugin's normal
+  WordPress login/API hooks and is **not** an SSO/SAML/OIDC/OAuth/LDAP MFA layer.
+  Enforce MFA at your identity provider, keep a break-glass administrator, and test
+  both the SSO callback and the direct `wp-login.php` path. Adds an SSO FAQ entry and
+  a rollout-checklist note.
+* Maintenance: releases are now published with a SHA-256 checksum and a build
+  provenance attestation, and the release pipeline is hardened (reviewed-commit gate,
+  SHA-pinned actions, optional release-approval gate). See docs/SUPPLY-CHAIN-SECURITY.md.
+* No change to enforcement behavior — functionally identical to 1.10.1.
 
 = 1.10.1 =
 * Admin UX: the dependency notice and its one-click button now reflect whether the
