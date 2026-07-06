@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.10.3
+Stable tag: 1.10.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -215,6 +215,12 @@ bypasses are intentionally narrow: only allowlisted accounts using Application
 Passwords can skip the interactive challenge.
 
 == Changelog ==
+
+= 1.10.4 =
+* Repo polish: added linked repository status badges for CI, latest release, docs,
+  license, WordPress/PHP requirements, Tested up to WordPress, Two Factor dependency,
+  and WordPress Playground.
+* No change to enforcement behavior — functionally identical to 1.10.3.
 
 = 1.10.3 =
 * Security tooling: CodeQL Actions analysis now uses SHA-pinned actions and the
