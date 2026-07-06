@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.10.2
+Stable tag: 1.10.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -215,6 +215,17 @@ bypasses are intentionally narrow: only allowlisted accounts using Application
 Passwords can skip the interactive challenge.
 
 == Changelog ==
+
+= 1.10.3 =
+* Security tooling: CodeQL Actions analysis now uses SHA-pinned actions and the
+  `security-extended` query set, matching the repository supply-chain convention.
+* Security tooling: added Semgrep PHP SAST (`p/php` and `p/security-audit`) with
+  SARIF upload to GitHub code scanning. Findings are report-only, while scanner,
+  configuration, or SARIF-upload failures still fail the job.
+* Supply chain: documented the fork-release approval caveat — forks must create
+  and protect their own `release` environment before the first tag if they want a
+  human approval pause.
+* No change to enforcement behavior — functionally identical to 1.10.2.
 
 = 1.10.2 =
 * Docs: clarified that this plugin enforces through the Two Factor plugin's normal
