@@ -16,6 +16,9 @@
 #   WP_VERSION=7.0                         WordPress version to download (default: latest)
 #   FORCE2FA_FAKE_VERSION=0.0.1            Version written into the disposable install
 #   FORCE2FA_UPDATE_E2E_KEEP=1             Keep the temp WordPress directory for inspection
+#   FORCE2FA_UPDATE_E2E_WPCLI_CACHE_DIR=...
+#                                          Override the isolated WP-CLI cache directory
+#                                          (default: temp dir, removed after each run)
 #   GITHUB_TOKEN=...                       Authenticate GitHub API calls (script + PUC),
 #                                          avoiding the anonymous per-IP rate limit in CI
 #   FORCE2FA_UPDATE_E2E_TOLERATE_MISSING_ASSET=1
@@ -31,6 +34,8 @@ PLUGIN_MAIN="${PLUGIN_SLUG}.php"
 FAKE_VERSION="${FORCE2FA_FAKE_VERSION:-0.0.1}"
 WORK="$(mktemp -d)"
 WP="$WORK/wp"
+WP_CLI_CACHE_DIR="${FORCE2FA_UPDATE_E2E_WPCLI_CACHE_DIR:-$WORK/wp-cli-cache}"
+export WP_CLI_CACHE_DIR
 
 # shellcheck source=bin/lib/e2e-common.sh
 . "$PLUGIN_DIR/bin/lib/e2e-common.sh"
@@ -44,7 +49,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$WP"
+mkdir -p "$WP" "$WP_CLI_CACHE_DIR"
+
+echo "==> WP-CLI cache: $WP_CLI_CACHE_DIR"
 
 UPDATE_URI="$(sed -n 's/^[[:space:]]*\*[[:space:]]*Update URI:[[:space:]]*//p' "$PLUGIN_DIR/$PLUGIN_MAIN" | head -n1 | tr -d '\r')"
 if [ -z "$UPDATE_URI" ]; then
