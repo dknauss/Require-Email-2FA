@@ -172,4 +172,39 @@ echo "==> Confirm current release offers no further update"
 export FORCE2FA_EXPECT="none"
 wp eval-file "$PLUGIN_DIR/bin/lib/update-check.php"
 
+echo "==> Uninstall must purge Plugin Update Checker state (option + cron)"
+# The plugin is otherwise stateless; its only persistent footprint is the PUC
+# StateStore option and the update-check cron. uninstall.php must remove both so
+# deletion leaves nothing behind.
+PUC_OPTION="external_updates-${PLUGIN_SLUG}"
+PUC_CRON="puc_cron_check_updates-${PLUGIN_SLUG}"
+
+# The forced checks above persist PUC's StateStore option; assert it is really
+# present so the post-uninstall check below cannot pass vacuously.
+if ! wp option get "$PUC_OPTION" >/dev/null 2>&1; then
+  echo "FAIL: expected PUC state option ${PUC_OPTION} to exist before uninstall" >&2
+  exit 1
+fi
+
+# Whether the update-check cron is scheduled depends on request lifecycle, so
+# schedule it explicitly to guarantee uninstall.php has an event to clear.
+wp cron event schedule "$PUC_CRON" now >/dev/null
+if ! wp cron event list --fields=hook --format=csv 2>/dev/null | grep -qx "$PUC_CRON"; then
+  echo "FAIL: could not seed PUC cron ${PUC_CRON} for the uninstall check" >&2
+  exit 1
+fi
+
+echo "==> Delete the plugin (runs uninstall.php)"
+wp plugin uninstall "$PLUGIN_SLUG" --deactivate
+
+if wp option get "$PUC_OPTION" >/dev/null 2>&1; then
+  echo "FAIL: uninstall left PUC state option ${PUC_OPTION} behind" >&2
+  exit 1
+fi
+if wp cron event list --fields=hook --format=csv 2>/dev/null | grep -qx "$PUC_CRON"; then
+  echo "FAIL: uninstall left PUC cron ${PUC_CRON} scheduled" >&2
+  exit 1
+fi
+echo "    uninstall left no PUC option or cron behind"
+
 echo "FORCE2FA_UPDATE_E2E_OK"
