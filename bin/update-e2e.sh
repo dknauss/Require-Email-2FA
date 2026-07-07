@@ -186,9 +186,19 @@ if ! wp option get "$PUC_OPTION" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Whether the update-check cron is scheduled depends on request lifecycle, so
-# schedule it explicitly to guarantee uninstall.php has an event to clear.
-wp cron event schedule "$PUC_CRON" now >/dev/null
+# PUC normally schedules this cron itself, but whether it is present depends on
+# request lifecycle, so ensure it idempotently: schedule one only if none exists
+# (a plain `wp cron event schedule` would error on PUC's already-scheduled hook).
+PUC_CRON="$PUC_CRON" wp eval '
+$hook = getenv( "PUC_CRON" );
+if ( ! wp_next_scheduled( $hook ) ) {
+    wp_schedule_event( time() + HOUR_IN_SECONDS, "daily", $hook );
+}
+if ( ! wp_next_scheduled( $hook ) ) {
+    fwrite( STDERR, "could not seed PUC cron " . $hook . "\n" );
+    exit( 1 );
+}
+'
 if ! wp cron event list --fields=hook --format=csv 2>/dev/null | grep -qx "$PUC_CRON"; then
   echo "FAIL: could not seed PUC cron ${PUC_CRON} for the uninstall check" >&2
   exit 1

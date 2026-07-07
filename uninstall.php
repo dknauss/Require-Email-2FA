@@ -37,8 +37,8 @@ $force_2fa_cron_hook   = 'puc_cron_check_updates-' . $force_2fa_slug;
 /**
  * Clear the PUC update-check cron event on the current site.
  *
- * wp_clear_scheduled_hook() only touches the current site's cron array, so on
- * multisite we call it once per site below.
+ * WordPress schedules cron per site, and wp_clear_scheduled_hook() only touches
+ * the current site's cron array, so on multisite we call it once per site below.
  *
  * @param string $hook The cron hook to unschedule.
  * @return void
