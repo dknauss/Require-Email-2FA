@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.10.4
+Stable tag: 1.10.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -215,6 +215,16 @@ bypasses are intentionally narrow: only allowlisted accounts using Application
 Passwords can skip the interactive challenge.
 
 == Changelog ==
+
+= 1.10.5 =
+* Uninstall cleanup: deleting the plugin now removes the only persistent data it
+  can leave behind — the bundled Plugin Update Checker's cached-update option
+  (`external_updates-*`) and its update-check cron event (`puc_cron_check_updates-*`)
+  — on every site, including multisite. Deactivating already stopped all enforcement
+  immediately; the plugin still stores no options, user meta, or transients of its own.
+* Tests: added single-site and multisite end-to-end coverage asserting uninstall
+  leaves no Plugin Update Checker option or cron behind.
+* No change to enforcement behavior — functionally identical to 1.10.4.
 
 = 1.10.4 =
 * Repo polish: added linked repository status badges for CI, latest release, docs,
