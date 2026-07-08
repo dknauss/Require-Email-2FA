@@ -57,7 +57,7 @@ delete_site_option( $force_2fa_option_name );
 // every site, so the event may be scheduled in more than one site's cron array;
 // clear it on each. On single site, clear it directly.
 if ( is_multisite() ) {
-	$force_2fa_site_ids = get_sites(
+	$force_2fa_sites = get_sites(
 		array(
 			'fields'                 => 'ids',
 			'number'                 => 0,
@@ -66,13 +66,13 @@ if ( is_multisite() ) {
 		)
 	);
 
-	foreach ( $force_2fa_site_ids as $force_2fa_site_id ) {
-		switch_to_blog( (int) $force_2fa_site_id );
+	foreach ( (array) $force_2fa_sites as $force_2fa_site_id ) {
+		switch_to_blog( absint( $force_2fa_site_id ) );
 		force_2fa_clear_update_cron( $force_2fa_cron_hook );
 		restore_current_blog();
 	}
 
-	unset( $force_2fa_site_ids, $force_2fa_site_id );
+	unset( $force_2fa_sites, $force_2fa_site_id );
 } else {
 	force_2fa_clear_update_cron( $force_2fa_cron_hook );
 }
