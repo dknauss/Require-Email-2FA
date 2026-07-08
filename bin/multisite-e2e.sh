@@ -10,7 +10,9 @@
 #   - a per-site `wp plugin activate` is REFUSED (the register_activation_hook
 #     guard rolls it back), while `--network` succeeds, and
 #   - with Two Factor absent the plugin loads and safely no-ops, and
-#   - the plugin ends up network-active and never per-site.
+#   - the plugin ends up network-active and never per-site, and
+#   - uninstall.php's multisite branch purges the network-level Plugin Update
+#     Checker option once and clears the update-check cron on EVERY site.
 #
 # Usage: bin/multisite-e2e.sh
 set -euo pipefail
@@ -69,4 +71,64 @@ if ( $net && ! $persite && $loaded && $noop && $guard ) {
 fwrite( STDERR, sprintf( "FAIL network_active=%d per_site=%d loaded=%d noop=%d guard=%d\n", $net, $persite, $loaded, $noop, $guard ) );
 exit( 1 );
 '
+
+echo "==> Uninstall must purge PUC state across all sites (uninstall.php multisite path)"
+# Exercises uninstall.php's multisite branch: the network-level StateStore option
+# is deleted once, and the update-check cron is cleared on EVERY site via the
+# get_sites() loop. The Plugin Update Checker itself is absent here (no vendor/),
+# so seed the two artifacts it would create and assert uninstall removes them.
+cp "$PLUGIN_DIR/uninstall.php" "$WP/wp-content/plugins/force-email-two-factor/"
+
+PUC_OPTION="external_updates-force-email-two-factor"
+PUC_CRON="puc_cron_check_updates-force-email-two-factor"
+
+# A second subsite so the get_sites() loop must clear more than one site's cron.
+wp site create --slug=sub2 >/dev/null
+SITE_IDS="$(wp site list --field=blog_id)"
+SITE_COUNT="$(printf '%s\n' "$SITE_IDS" | grep -c .)"
+if [ "$SITE_COUNT" -lt 2 ]; then
+  echo "FAIL: expected at least 2 sites for the multisite uninstall check, got ${SITE_COUNT}" >&2
+  exit 1
+fi
+
+# Network-level cached-update option (StateStore uses update_site_option()).
+wp eval "update_site_option( '${PUC_OPTION}', array( 'seeded' => true ) );"
+
+# Update-check cron on every site (WP-Cron is per-site).
+for site_id in $SITE_IDS; do
+  site_url="$(wp site url "$site_id")"
+  PUC_CRON="$PUC_CRON" wp --url="$site_url" eval '
+    $hook = getenv( "PUC_CRON" );
+    if ( ! wp_next_scheduled( $hook ) ) {
+        wp_schedule_event( time() + HOUR_IN_SECONDS, "daily", $hook );
+    }
+    if ( ! wp_next_scheduled( $hook ) ) {
+        fwrite( STDERR, "could not seed cron on site " . get_current_blog_id() . "\n" );
+        exit( 1 );
+    }
+  '
+done
+
+# Network-deactivate first (separate command) so the delete runs with the plugin
+# unloaded, exactly like the real Network Admin "Delete" flow.
+wp plugin deactivate force-email-two-factor --network
+wp plugin uninstall force-email-two-factor
+
+# The network-level option must be gone.
+option_state="$(wp eval "echo ( false === get_site_option( '${PUC_OPTION}' ) ) ? 'GONE' : 'PRESENT';")"
+if [ "$option_state" != "GONE" ]; then
+  echo "FAIL: uninstall left the network option ${PUC_OPTION} (${option_state})" >&2
+  exit 1
+fi
+
+# The cron must be cleared on every site.
+for site_id in $SITE_IDS; do
+  site_url="$(wp site url "$site_id")"
+  if wp --url="$site_url" cron event list --fields=hook --format=csv 2>/dev/null | grep -qx "$PUC_CRON"; then
+    echo "FAIL: uninstall left cron ${PUC_CRON} scheduled on site ${site_id} (${site_url})" >&2
+    exit 1
+  fi
+done
+echo "    network option deleted and cron cleared on all ${SITE_COUNT} sites"
+
 echo "==> Multisite E2E passed."
