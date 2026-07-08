@@ -5,6 +5,7 @@
     <!-- Production files only — dev/test code may use newer syntax. -->
     <file>force-email-two-factor.php</file>
     <file>mu-loader.php</file>
+    <file>uninstall.php</file>
 
     <exclude-pattern>*/vendor/*</exclude-pattern>
     <exclude-pattern>*/tests/*</exclude-pattern>

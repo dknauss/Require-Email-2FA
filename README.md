@@ -249,6 +249,19 @@ The plugin checks this constant at load time and registers nothing when it's set
 
 ---
 
+## Uninstalling and data footprint
+
+The plugin is effectively stateless: it stores **no** options, user meta, or transients of its own. All enforcement happens through runtime filters and actions on the Two Factor plugin's hooks, so it holds nothing that could outlive it or interfere with other login flows.
+
+- **Deactivating** unhooks everything immediately — 2FA enforcement stops that instant, with no residue. If self-update is active, the bundled Plugin Update Checker also clears its update-check cron on deactivation.
+- **Deleting (uninstall)** runs `uninstall.php`, which purges the only persistent footprint the plugin can create — the Plugin Update Checker's cached-update option (`external_updates-<slug>`) and its update-check cron event (`puc_cron_check_updates-<slug>`), across all sites on multisite. Nothing is left in the database.
+
+Nothing this plugin creates touches an SSO/SAML/OIDC/OAuth/LDAP integration's configuration or session state, so removing it cannot break those login paths. See [Compatibility & interaction with other 2FA setups](#compatibility--interaction-with-other-2fa-setups) for how it behaves alongside SSO while active.
+
+> **Note:** if you enabled the optional [“cannot be deactivated” mode](#optional-cannot-be-deactivated-mode-mu-loader), delete `wp-content/mu-plugins/mu-loader.php` as well — a must-use plugin is not removed by deactivating or deleting the plugin from the Plugins screen.
+
+---
+
 ## How it works (for maintainers)
 
 - **Forcing 2FA:** filters `two_factor_enabled_providers_for_user` to add
