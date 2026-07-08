@@ -174,38 +174,43 @@ wp eval-file "$PLUGIN_DIR/bin/lib/update-check.php"
 
 echo "==> Uninstall must purge Plugin Update Checker state (option + cron)"
 # The plugin is otherwise stateless; its only persistent footprint is the PUC
-# StateStore option and the update-check cron. uninstall.php must remove both so
-# deletion leaves nothing behind.
+# StateStore option and the update-check cron, both of which uninstall.php must
+# remove so deletion leaves nothing behind.
+#
+# `wp plugin update` above replaced the on-disk plugin with the *released*
+# version, which predates uninstall.php — so reinstall the working tree (HEAD)
+# to exercise THIS change's cleanup rather than the shipped release. Deactivate
+# first, as a separate command, so the delete runs with the plugin unloaded,
+# exactly like the real admin "Delete" flow (a combined deactivate+uninstall in
+# one WP-CLI process would keep PUC in memory to re-persist its state).
 PUC_OPTION="external_updates-${PLUGIN_SLUG}"
 PUC_CRON="puc_cron_check_updates-${PLUGIN_SLUG}"
 
-# The forced checks above persist PUC's StateStore option; assert it is really
-# present so the post-uninstall check below cannot pass vacuously.
-if ! wp option get "$PUC_OPTION" >/dev/null 2>&1; then
-  echo "FAIL: expected PUC state option ${PUC_OPTION} to exist before uninstall" >&2
+wp plugin deactivate "$PLUGIN_SLUG"
+rm -rf "$DEST"
+git -C "$PLUGIN_DIR" archive --format=tar --prefix="$PLUGIN_SLUG/" HEAD | tar -x -C "$WP/wp-content/plugins/"
+if [ ! -f "$DEST/uninstall.php" ]; then
+  echo "FAIL: reinstalled working tree is missing uninstall.php" >&2
   exit 1
 fi
 
-# PUC normally schedules this cron itself, but whether it is present depends on
-# request lifecycle, so ensure it idempotently: schedule one only if none exists
-# (a plain `wp cron event schedule` would error on PUC's already-scheduled hook).
-PUC_CRON="$PUC_CRON" wp eval '
-$hook = getenv( "PUC_CRON" );
+# Seed both artifacts deterministically so the purge assertion is meaningful and
+# independent of PUC's own scheduling/persistence timing.
+PUC_OPTION="$PUC_OPTION" PUC_CRON="$PUC_CRON" wp eval '
+$option = getenv( "PUC_OPTION" );
+$hook   = getenv( "PUC_CRON" );
+update_option( $option, array( "seeded" => true ) );
 if ( ! wp_next_scheduled( $hook ) ) {
     wp_schedule_event( time() + HOUR_IN_SECONDS, "daily", $hook );
 }
-if ( ! wp_next_scheduled( $hook ) ) {
-    fwrite( STDERR, "could not seed PUC cron " . $hook . "\n" );
+if ( false === get_option( $option ) || ! wp_next_scheduled( $hook ) ) {
+    fwrite( STDERR, "could not seed PUC state for the uninstall check\n" );
     exit( 1 );
 }
 '
-if ! wp cron event list --fields=hook --format=csv 2>/dev/null | grep -qx "$PUC_CRON"; then
-  echo "FAIL: could not seed PUC cron ${PUC_CRON} for the uninstall check" >&2
-  exit 1
-fi
 
-echo "==> Delete the plugin (runs uninstall.php)"
-wp plugin uninstall "$PLUGIN_SLUG" --deactivate
+echo "==> Delete the plugin (runs uninstall.php from the working tree)"
+wp plugin uninstall "$PLUGIN_SLUG"
 
 if wp option get "$PUC_OPTION" >/dev/null 2>&1; then
   echo "FAIL: uninstall left PUC state option ${PUC_OPTION} behind" >&2
