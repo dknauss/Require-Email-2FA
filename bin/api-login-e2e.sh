@@ -81,14 +81,16 @@ SVC_APP="$(wp user application-password create svc   e2e --porcelain)"
 OTHER_APP="$(wp user application-password create other e2e --porcelain)"
 
 # Authenticated, edit-context endpoint: returns 200 only for a real logged-in user.
-ME="${BASE}/wp-json/wp/v2/users/me?context=edit"
+# Use the ?rest_route= form, which resolves without a pretty-permalink structure
+# (a fresh install uses plain permalinks, so /wp-json/ 301-redirects).
+ME="${BASE}/?rest_route=/wp/v2/users/me&context=edit"
 
 start_server() {
   wp server --host="$HOST" --port="$PORT" >"$WORK/server.log" 2>&1 &
   SERVER_PID="$!"
   # Wait for the built-in server to accept connections (up to ~30s).
   for _ in $(seq 1 60); do
-    if curl -fsS -o /dev/null "${BASE}/wp-json/" 2>/dev/null; then
+    if curl -fsS -o /dev/null "${BASE}/?rest_route=/" 2>/dev/null; then
       return 0
     fi
     sleep 0.5

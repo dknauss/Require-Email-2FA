@@ -875,6 +875,9 @@ function force_2fa_network_dependency_notice() {
 	}
 }
 
+// @codeCoverageIgnoreStart
+// Glue-only: the pure decision is force_2fa_activation_blocked() (unit-tested); the
+// deactivate_plugins()/wp_die() rollback is exercised by bin/multisite-e2e.sh.
 /**
  * Refuse per-site activation on multisite (this plugin is network-only).
  *
@@ -893,9 +896,6 @@ function force_2fa_network_dependency_notice() {
  *
  * @param bool $network_wide Whether the activation is network-wide.
  */
-// @codeCoverageIgnoreStart
-// Glue-only: the pure decision is force_2fa_activation_blocked() (unit-tested); the
-// deactivate_plugins()/wp_die() rollback is exercised by bin/multisite-e2e.sh.
 function force_2fa_block_single_site_activation( $network_wide ) {
 	if ( ! force_2fa_activation_blocked( is_multisite(), $network_wide ) ) {
 		return;
