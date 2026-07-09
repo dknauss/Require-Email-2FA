@@ -11,6 +11,11 @@
 #     guard rolls it back), while `--network` succeeds, and
 #   - with Two Factor absent the plugin loads and safely no-ops, and
 #   - the plugin ends up network-active and never per-site, and
+#   - the FORCE_2FA_DISABLE emergency kill switch makes the plugin return at load
+#     (FORCE_2FA_LOADED undefined) with no enforcement filters attached, and
+#   - the optional mu-loader force-loads the plugin exactly once alongside a normal
+#     network activation (the FORCE_2FA_LOADED re-load guard prevents a fatal
+#     redeclare), and the kill switch still wins when mu-loaded, and
 #   - uninstall.php's multisite branch purges the network-level Plugin Update
 #     Checker option once and clears the update-check cron on EVERY site.
 #
@@ -71,6 +76,63 @@ if ( $net && ! $persite && $loaded && $noop && $guard ) {
 fwrite( STDERR, sprintf( "FAIL network_active=%d per_site=%d loaded=%d noop=%d guard=%d\n", $net, $persite, $loaded, $noop, $guard ) );
 exit( 1 );
 '
+
+echo "==> Emergency kill switch (FORCE_2FA_DISABLE) disables all enforcement"
+# The plugin checks FORCE_2FA_DISABLE at load and returns before defining anything,
+# so FORCE_2FA_LOADED must stay undefined and no enforcement filter may be attached —
+# even though the plugin is still network-active. This is the break-glass recovery
+# path for a mail outage, so it must be proven, not assumed.
+wp config set FORCE_2FA_DISABLE true --raw --type=constant
+wp eval '
+$loaded = defined( "FORCE_2FA_LOADED" );
+$prov   = has_filter( "two_factor_enabled_providers_for_user", "force_2fa_filter_enabled_providers" );
+$api    = has_filter( "two_factor_user_api_login_enable", "force_2fa_filter_api_login_enable" );
+if ( ! $loaded && false === $prov && false === $api ) {
+    echo "FORCE2FA_KILL_OK\n";
+    exit( 0 );
+}
+fwrite( STDERR, sprintf( "FAIL loaded=%d providers_filter=%s api_filter=%s\n", $loaded, var_export( $prov, true ), var_export( $api, true ) ) );
+exit( 1 );
+'
+wp config delete FORCE_2FA_DISABLE --type=constant
+
+echo "==> mu-loader force-loads the plugin once, alongside the network activation"
+# Copy the shipped mu-loader (not a test shim) into mu-plugins/. mu-plugins load
+# before regular plugins, so the plugin is included twice in one request; the
+# FORCE_2FA_LOADED re-load guard must make the second include a no-op. A broken guard
+# would fatal on redeclaring the const/functions, so reaching the assertion at all
+# proves it held. Enforcement must still be wired (mu-loaded AND active).
+mkdir -p "$WP/wp-content/mu-plugins"
+cp "$PLUGIN_DIR/mu-loader.php" "$WP/wp-content/mu-plugins/"
+wp eval '
+$loaded = defined( "FORCE_2FA_LOADED" );
+$prov   = has_filter( "two_factor_enabled_providers_for_user", "force_2fa_filter_enabled_providers" );
+if ( $loaded && false !== $prov ) {
+    echo "FORCE2FA_MU_OK\n";
+    exit( 0 );
+}
+fwrite( STDERR, sprintf( "FAIL loaded=%d providers_filter=%s\n", $loaded, var_export( $prov, true ) ) );
+exit( 1 );
+'
+
+echo "==> Kill switch wins even when the plugin is mu-loaded"
+# FORCE_2FA_DISABLE is checked before the re-load guard, so an mu-loaded plugin must
+# still bail: FORCE_2FA_LOADED undefined and no enforcement filter attached.
+wp config set FORCE_2FA_DISABLE true --raw --type=constant
+wp eval '
+$loaded = defined( "FORCE_2FA_LOADED" );
+$prov   = has_filter( "two_factor_enabled_providers_for_user", "force_2fa_filter_enabled_providers" );
+if ( ! $loaded && false === $prov ) {
+    echo "FORCE2FA_MU_KILL_OK\n";
+    exit( 0 );
+}
+fwrite( STDERR, sprintf( "FAIL loaded=%d providers_filter=%s\n", $loaded, var_export( $prov, true ) ) );
+exit( 1 );
+'
+wp config delete FORCE_2FA_DISABLE --type=constant
+
+# Restore a clean state for the uninstall assertions below (no mu-loader, no kill switch).
+rm -f "$WP/wp-content/mu-plugins/mu-loader.php"
 
 echo "==> Uninstall must purge PUC state across all sites (uninstall.php multisite path)"
 # Exercises uninstall.php's multisite branch: the network-level StateStore option
