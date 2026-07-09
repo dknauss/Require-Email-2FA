@@ -15,7 +15,9 @@
 #     (FORCE_2FA_LOADED undefined) with no enforcement filters attached, and
 #   - the optional mu-loader force-loads the plugin exactly once alongside a normal
 #     network activation (the FORCE_2FA_LOADED re-load guard prevents a fatal
-#     redeclare), and the kill switch still wins when mu-loaded, and
+#     redeclare), keeps the plugin loaded and enforcing even when it is
+#     network-DEACTIVATED (the "cannot be deactivated" guarantee), and the kill
+#     switch still wins when mu-loaded, and
 #   - uninstall.php's multisite branch purges the network-level Plugin Update
 #     Checker option once and clears the update-check cron on EVERY site.
 #
@@ -130,6 +132,28 @@ fwrite( STDERR, sprintf( "FAIL loaded=%d providers_filter=%s\n", $loaded, var_ex
 exit( 1 );
 '
 wp config delete FORCE_2FA_DISABLE --type=constant
+
+echo "==> mu-loader keeps enforcement on even when the plugin is network-deactivated"
+# Isolation leg: the two checks above run with the plugin still network-active, so
+# they don't prove the mu-loader did anything on its own. Network-deactivate the
+# plugin and confirm it is STILL loaded and enforcing purely because mu-loader.php
+# force-loads it — the "cannot be deactivated" guarantee the mu-loader exists for.
+wp plugin deactivate force-email-two-factor --network
+wp eval '
+require_once ABSPATH . "wp-admin/includes/plugin.php";
+$f      = "force-email-two-factor/force-email-two-factor.php";
+$net    = is_plugin_active_for_network( $f );
+$loaded = defined( "FORCE_2FA_LOADED" );
+$prov   = has_filter( "two_factor_enabled_providers_for_user", "force_2fa_filter_enabled_providers" );
+if ( ! $net && $loaded && false !== $prov ) {
+    echo "FORCE2FA_MU_ONLY_OK\n";
+    exit( 0 );
+}
+fwrite( STDERR, sprintf( "FAIL network_active=%d loaded=%d providers_filter=%s\n", $net, $loaded, var_export( $prov, true ) ) );
+exit( 1 );
+'
+# Re-network-activate so the uninstall section below runs from the same state as before.
+wp plugin activate force-email-two-factor --network
 
 # Restore a clean state for the uninstall assertions below (no mu-loader, no kill switch).
 rm -f "$WP/wp-content/mu-plugins/mu-loader.php"

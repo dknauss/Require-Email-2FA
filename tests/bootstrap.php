@@ -150,7 +150,10 @@ function current_user_can( $cap ) {
 // on-disk "is Two Factor installed?" check (file_exists) is controllable. The
 // TestCase creates/removes two-factor/two-factor.php under here to toggle state.
 if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
-	define( 'WP_PLUGIN_DIR', sys_get_temp_dir() . '/force2fa-test-plugins' );
+	// Per-process directory (getmypid) so the default and no-two-factor PHPUnit
+	// configs — which run as separate processes and each toggle two-factor.php on
+	// disk — can never collide if CI ever runs them concurrently.
+	define( 'WP_PLUGIN_DIR', sys_get_temp_dir() . '/force2fa-test-plugins-' . getmypid() );
 }
 
 function esc_html( $text ) {

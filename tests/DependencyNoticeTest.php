@@ -46,7 +46,13 @@ final class DependencyNoticeTest extends TestCase {
 
 		$html = $this->renderNotice( 'force_2fa_dependency_notice' );
 
-		$this->assertStringContainsString( 'not enforcing email 2FA on this site', $html );
+		// Assert the string that DISTINGUISHES the 'unusable' subsite branch from the
+		// generic heads-up branch (whose title and "network administrator" wording are
+		// otherwise identical). Without this, a regression that fell through to the
+		// heads-up notice — telling the admin to "install and network-activate" instead
+		// of "restore the Email provider" — would still pass.
+		$this->assertStringContainsString( 'Email provider is not available', $html );
+		$this->assertStringContainsString( 'restore the Email provider', $html );
 		$this->assertStringContainsString( 'network administrator', $html );
 		$this->assertStringNotContainsString( 'button-primary', $html );
 	}
