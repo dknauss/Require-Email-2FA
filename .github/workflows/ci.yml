@@ -93,17 +93,27 @@ jobs:
       - name: PHPUnit with coverage
         run: |
           vendor/bin/phpunit --coverage-text --coverage-clover=coverage.xml | tee coverage.txt
+          # The Two-Factor-absent suite covers branches unreachable under the default
+          # bootstrap; include its clover so the ratchet sees combined coverage.
+          vendor/bin/phpunit -c phpunit-no-two-factor.xml.dist --coverage-clover=coverage-no-two-factor.xml
           {
             echo '### Code coverage'
             echo '```'
             cat coverage.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Enforce coverage floor
+        # Conservative starting floor: the untestable glue is @codeCoverageIgnore'd,
+        # so the counted lines are almost entirely tested. Raise this toward the
+        # actual combined figure (see the step summary above) as a ratchet.
+        run: php bin/coverage-threshold.php 80 coverage.xml coverage-no-two-factor.xml
       - name: Upload coverage artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage-clover
-          path: coverage.xml
+          path: |
+            coverage.xml
+            coverage-no-two-factor.xml
 
   playground-integration:
     name: Playground integration (real Two Factor)
@@ -147,6 +157,19 @@ jobs:
           extensions: sqlite3, pdo_sqlite
       - name: Real WordPress + Two Factor, API-login allowlist end-to-end
         run: bash bin/api-login-e2e.sh
+
+  install-handler-e2e:
+    name: Install-handler E2E (one-click install)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: sqlite3, pdo_sqlite
+      - name: Real WordPress, one-click Two Factor install handler end-to-end
+        run: bash bin/install-handler-e2e.sh
 
   update-e2e:
     name: Update E2E (GitHub Releases)
