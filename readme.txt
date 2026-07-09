@@ -84,15 +84,21 @@ rollout, since email becomes the required factor for users with no stronger one.
 
 Before production activation:
 
-* Confirm SMTP / transactional email delivery works.
-* Keep a known-good administrator session open.
-* Generate and safely store administrator backup codes.
-* Test one non-admin login before broad rollout.
-* Choose the right activation mode: single-site, Network Activate, or `mu-loader.php`.
-* Identify REST/XML-RPC service accounts and decide whether they need allowlisting.
-* If the site uses SSO/SAML/OIDC/OAuth/LDAP/Jetpack SSO, test both SSO and direct
-  `wp-login.php` on staging; enforce MFA at the identity provider.
-* Document the `FORCE_2FA_DISABLE` kill switch in your incident runbook.
+* **Email is the second factor, so email must work, or people get locked out.**
+  Confirm SMTP / transactional email delivery works.
+* **Keep a way back in while you roll out.** Keep a known-good administrator session open.
+* **Have a recovery path if mail fails.** Generate and safely store administrator backup codes.
+* **Prove the flow before you trust it.** Test one non-admin login before broad rollout.
+* **Decide how enforcement turns on.** Choose the right activation mode: single-site,
+  Network Activate, or `mu-loader.php`.
+* **Plan for integrations that can't read an email code.** Identify XML-RPC service
+  accounts and decide whether they need allowlisting. (The allowlist covers XML-RPC,
+  not REST; scope REST integrations by role/capability instead.)
+* **Don't assume SSO logins are covered.** If the site uses SSO/SAML/OIDC/OAuth/LDAP/
+  Jetpack SSO, test both SSO and direct `wp-login.php` on staging; enforce MFA at the
+  identity provider.
+* **Write down the escape hatch before you need it.** Document the `FORCE_2FA_DISABLE`
+  kill switch in your incident runbook.
 
 == Frequently Asked Questions ==
 
@@ -228,8 +234,9 @@ network-wide guarantee also depends on Two Factor itself being network-active. T
 API-login allowlist governs XML-RPC only: an XML-RPC login can skip the interactive
 challenge only for allowlisted accounts using Application Passwords, while REST
 Application Password logins are not gated by Two Factor and are not restricted by
-the allowlist (scope REST access via roles/capabilities). Excluding a role also
-removes those accounts from this API-login gate.
+the allowlist (scope REST access via roles/capabilities). Extending the allowlist to
+cover REST is on the roadmap (issue #41). Excluding a role also removes those accounts
+from this API-login gate.
 
 == Changelog ==
 
