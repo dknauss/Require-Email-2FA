@@ -82,6 +82,53 @@ function is_network_admin() {
 	return ! empty( $GLOBALS['__force2fa_is_network_admin'] );
 }
 
+// Whether this is a multisite network. Driven by a global so a test can exercise
+// both the single-site and multisite branches (e.g. uninstall.php).
+function is_multisite() {
+	return ! empty( $GLOBALS['__force2fa_is_multisite'] );
+}
+
+// Delete a network/site option. Records the keys deleted so the uninstall test can
+// assert exactly which options were purged, without a real WordPress options store.
+function delete_site_option( $option ) {
+	$GLOBALS['__force2fa_deleted_site_options'][] = $option;
+	return true;
+}
+
+// Clear all scheduled occurrences of a cron hook. Records the hooks cleared (with
+// the current blog id, so the multisite per-site loop is observable) for the
+// uninstall test.
+function wp_clear_scheduled_hook( $hook ) {
+	$GLOBALS['__force2fa_cleared_crons'][] = array(
+		'hook'    => $hook,
+		'blog_id' => $GLOBALS['__force2fa_current_blog_id'] ?? 1,
+	);
+}
+
+// Coerce a value to a non-negative integer (WordPress core helper).
+function absint( $value ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress core stub.
+	return abs( (int) $value );
+}
+
+// Return the network's site IDs. Driven by a global so the multisite uninstall
+// path can be pointed at a specific set of sites.
+function get_sites( $args = array() ) {
+	return $GLOBALS['__force2fa_sites'] ?? array();
+}
+
+// Switch the "current" blog. Records the active blog id so wp_clear_scheduled_hook()
+// above attributes each cleared cron to the right site.
+function switch_to_blog( $blog_id ) {
+	$GLOBALS['__force2fa_current_blog_id'] = (int) $blog_id;
+	return true;
+}
+
+// Restore the "current" blog to the network default (blog 1 in these stubs).
+function restore_current_blog() {
+	$GLOBALS['__force2fa_current_blog_id'] = 1;
+	return true;
+}
+
 // Current-user capability check. Defaults to a fully-capable admin (every cap); a
 // test can set $GLOBALS['__force2fa_user_caps'] to the exact caps the user holds
 // to exercise a capability-limited role (e.g. can activate but not install).

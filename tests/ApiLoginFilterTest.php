@@ -55,4 +55,15 @@ final class ApiLoginFilterTest extends TestCase {
 		$this->appPasswordUsed( true, 999 );
 		$this->assertFalse( force_2fa_filter_api_login_enable( true, 999 ) );
 	}
+
+	public function test_user_with_empty_login_is_denied(): void {
+		// A resolved user whose user_login is empty (malformed record) hits the
+		// `empty( $user->user_login )` guard and is denied before the allowlist or
+		// app-password checks — fail-closed. Distinct from test_unknown_user_is_denied,
+		// where get_userdata() returns false outright.
+		$this->allowlist( array( 5 ) );
+		$user = $this->user( 5, '', array( 'author' ) );
+		$this->appPasswordUsed( true, 5 );
+		$this->assertFalse( force_2fa_filter_api_login_enable( true, $user ) );
+	}
 }

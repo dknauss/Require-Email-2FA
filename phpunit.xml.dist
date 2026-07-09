@@ -19,6 +19,8 @@
             <file>tests/UpdateCheckerAccessorTest.php</file>
             <file>tests/AppPasswordBindingTest.php</file>
             <file>tests/SelfUpdateStatusTest.php</file>
+            <!-- Last: uninstall.php runs at include time and defines a constant/function. -->
+            <file>tests/UninstallTest.php</file>
         </testsuite>
         <testsuite name="integration">
             <file>tests/IntegrationTest.php</file>

@@ -19,7 +19,10 @@ abstract class TestCase extends BaseTestCase {
 		$GLOBALS['__force2fa_added_actions'] = array();
 		$GLOBALS['__force2fa_localized']      = array();
 		$GLOBALS['__force2fa_inline_scripts'] = array();
-		unset( $GLOBALS['force_2fa_app_password_user_id'], $GLOBALS['__force2fa_providers'], $GLOBALS['__force2fa_is_network_admin'], $GLOBALS['__force2fa_user_caps'] );
+		$GLOBALS['__force2fa_deleted_site_options'] = array();
+		$GLOBALS['__force2fa_cleared_crons']        = array();
+		$GLOBALS['__force2fa_current_blog_id']      = 1;
+		unset( $GLOBALS['force_2fa_app_password_user_id'], $GLOBALS['__force2fa_providers'], $GLOBALS['__force2fa_is_network_admin'], $GLOBALS['__force2fa_user_caps'], $GLOBALS['__force2fa_is_multisite'], $GLOBALS['__force2fa_sites'] );
 	}
 
 	/** Register a WP_User that get_userdata() will return for its ID. */

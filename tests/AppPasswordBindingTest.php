@@ -40,4 +40,24 @@ final class AppPasswordBindingTest extends TestCase {
 		force_2fa_note_app_password_user( null );
 		$this->assertSame( 0, force_2fa_app_password_user_id() );
 	}
+
+	public function test_register_hooks_wires_the_app_password_writer(): void {
+		// The whole API-login bypass rests on force_2fa_note_app_password_user()
+		// running on every Application Password auth: if this add_action were
+		// dropped, force_2fa_app_password_user_id() would always read 0 and EVERY
+		// service account would be denied (a fail-closed outage). None of the other
+		// register_hooks tests assert this action, so guard it explicitly.
+		$GLOBALS['__force2fa_added_actions'] = array();
+		force_2fa_register_hooks();
+
+		$found = false;
+		foreach ( $GLOBALS['__force2fa_added_actions'] as $registration ) {
+			if ( 'application_password_did_authenticate' === $registration[0]
+				&& 'force_2fa_note_app_password_user' === $registration[1] ) {
+				$found = true;
+			}
+		}
+
+		$this->assertTrue( $found, 'The app-password writer must be hooked to application_password_did_authenticate.' );
+	}
 }

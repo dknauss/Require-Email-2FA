@@ -986,6 +986,7 @@ function force_2fa_handle_install_two_factor() {
 	wp_safe_redirect( $network ? network_admin_url( 'plugins.php' ) : admin_url( 'plugins.php' ) );
 	exit;
 }
+// @codeCoverageIgnoreEnd
 
 /**
  * Keep the dependency notice honest when Two Factor is deleted via the AJAX "Delete".
@@ -1046,7 +1047,6 @@ function force_2fa_enqueue_notice_refresh( $hook ) {
 		. '});'
 	);
 }
-// @codeCoverageIgnoreEnd
 
 /**
  * Get — or, from the bootstrap, record — the wired Plugin Update Checker instance.
