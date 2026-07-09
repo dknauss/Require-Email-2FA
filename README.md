@@ -19,7 +19,7 @@ Require Email 2FA imposes three requirements site- or network-wide:
 2. All users must use Two Factor to log in. (Exceptions can be set with a constant or filter.)
 3. Users who do not have a different method selected in their two-factor settings will receive time-based, one-time passcodes by email.
 
-The plugin also locks down the XML-RPC / REST API-login path. (A named allowlist of service accounts can be added with a constant or filter.)
+The plugin also hardens the XML-RPC login path with a named allowlist of service accounts (added via a constant or filter). Note this allowlist governs XML-RPC, not REST — see **Restricts XML-RPC logins** below.
 
 On multisite the plugin is **network-only** (Network Activate; per-site activation is blocked), and an optional `mu-loader.php` file can be moved to the `/mu-plugins` folder to make it un-deactivatable within the WordPress admin interface.
 
@@ -43,13 +43,26 @@ Require Email 2FA's dependency on Two Factor is *soft*: the Require Email 2FA pl
    up a stronger factor (TOTP, hardware key / WebAuthn) keep it as their primary
    method, and **backup codes remain available** as a recovery path.
 
-2. **Restricts API logins.** XML-RPC and REST logins bypass the interactive 2FA
-   screen. This plugin allows an API login to skip 2FA **only** when *both*:
+2. **Restricts XML-RPC logins.** Non-interactive logins bypass the interactive
+   2FA screen. This plugin allows such a login to skip 2FA **only** when *both*:
    - the account is on an explicit allowlist, **and**
    - the request authenticated with an **Application Password** (not the real
      login password).
 
-   Everyone else is denied on the API path.
+   Everyone else is denied.
+
+   > [!IMPORTANT]
+   > **Scope — this allowlist governs XML-RPC, not the REST API.** Two Factor's
+   > only API-login gate runs on the `authenticate` filter, which XML-RPC logins
+   > pass through. REST requests authenticated with an Application Password set the
+   > current user via WordPress core's `determine_current_user` path
+   > (`wp_validate_application_password`) and never touch that filter — so Two
+   > Factor, and therefore this allowlist, does **not** gate them. Any account with
+   > an Application Password can authenticate over the REST API regardless of the
+   > allowlist. To restrict REST access, scope each account's role/capabilities
+   > (Application Passwords inherit the user's caps), disable Application Passwords
+   > for users who shouldn't have them (`wp_is_application_passwords_available_for_user`),
+   > or add a REST-layer gate (`rest_authentication_errors`).
 
 > [!IMPORTANT]
 > For security hardening purposes, it's strongly recommended that you set up Require Email 2FA as a mu-plugin if you establish user role exclusions and/or an API user allowlist.
@@ -175,6 +188,13 @@ exempt on that site. Choose excluded roles deliberately, and prefer the
 Exclusion means "don't *force* 2FA"; it doesn't forbid it. An excluded user who
 set up their own 2FA keeps it.
 
+> **Excluding a role also removes those accounts from the API-login hardening.**
+> Two Factor only gates the API login of a user it considers "using 2FA." An
+> excluded account with no other factor configured is not using 2FA, so Two
+> Factor never gates its XML-RPC/REST logins — the API-login allowlist does not
+> apply to it. Don't exclude a role for accounts you also expect the API allowlist
+> to govern.
+
 For one-off cases (e.g. exempt a single user ID rather than a whole role), use the
 `force_2fa_user_is_exempt` filter instead of editing the role list:
 
@@ -191,6 +211,12 @@ add_filter( 'force_2fa_user_is_exempt', function ( $exempt, $user ) {
 
 Edit the `FORCE_2FA_API_LOGIN_ALLOWLIST` constant in the plugin file. Each entry
 is either a numeric **user ID** or a **user_login** (case-insensitive):
+
+> **Numeric entries always match by user ID.** An entry made of digits (e.g.
+> `'1001'`) is compared against the user ID only — never against `user_login`. If a
+> service account's `user_login` happens to be all digits, it cannot be allowlisted
+> by that login (and the numeric value would match whichever account holds that
+> *ID* instead). Allowlist such accounts by their user ID, which is unambiguous.
 
 ```php
 const FORCE_2FA_API_LOGIN_ALLOWLIST = array(
@@ -274,11 +300,14 @@ Nothing this plugin creates touches an SSO/SAML/OIDC/OAuth/LDAP integration's co
   filter no-ops safely (never stripping an existing factor) if Two Factor is
   inactive, and does not append a provider Two Factor can't resolve.
 
-- **API logins:** filters `two_factor_user_api_login_enable`. The plugin's own
-  default for this filter is `did_action( 'application_password_did_authenticate' )`,
-  i.e. it already allows API logins without 2FA only via Application Passwords.
-  This plugin recomputes the decision as *(this account used an Application
-  Password this request) AND (user is allowlisted)*. The account is captured on
+- **API logins:** filters `two_factor_user_api_login_enable`. Two Factor's default
+  value for this filter is `did_action( 'application_password_did_authenticate' )`,
+  i.e. it already allows an API login to skip 2FA only when an Application Password
+  authenticated the request. This plugin recomputes the decision as *(this account
+  used an Application Password this request) AND (user is allowlisted)*. This gate
+  runs only on the `authenticate` path (XML-RPC); REST Application Password logins
+  bypass it via core's `determine_current_user` and are not gated (see the API
+  hardening note under Security model). The account is captured on
   `application_password_did_authenticate` — fired by core while authenticating the
   request — and Two Factor evaluates `two_factor_user_api_login_enable` afterward,
   during its API-login gating, so the marker is reliably set by the time the
@@ -415,8 +444,12 @@ does nothing else.
   Per-site activation is blocked; but even network-activated, a true network-wide
   guarantee requires the Two Factor plugin to *also* be network-active (the
   Network Admin notice warns when it isn't).
-- **API bypasses are intentionally narrow.** XML-RPC/REST logins can skip the
+- **The API allowlist governs XML-RPC, not REST.** An XML-RPC login can skip the
   interactive challenge only for allowlisted accounts using Application Passwords.
+  REST Application Password logins are **not** gated by Two Factor (they
+  authenticate via core's `determine_current_user` path), so the allowlist does
+  not restrict them — scope REST access via roles/capabilities instead. See
+  **Restricts XML-RPC logins** above.
 - **Email can be weaker than TOTP/WebAuthn.** This plugin uses Email as a universal
   no-setup floor while preserving stronger factors users have already configured.
 

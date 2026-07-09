@@ -63,9 +63,10 @@ if ( 0 === $total ) {
 $percent = ( $covered / $total ) * 100;
 printf( "Combined line coverage: %.2f%% (%d/%d) — floor %.2f%%\n", $percent, $covered, $total, $min );
 
-// Round to two decimals before comparing so a report of exactly the floor passes and
-// floating-point noise just under it does not spuriously fail.
-if ( round( $percent, 2 ) + 1e-9 < $min ) {
+// Compare the raw percentage (not a 2-decimal-rounded copy) so the effective floor
+// is exactly $min, not $min - 0.005. The 1e-9 epsilon only absorbs float noise so a
+// report of exactly the floor still passes.
+if ( $percent + 1e-9 < $min ) {
 	fwrite( STDERR, sprintf( "FAIL: coverage %.2f%% is below the %.2f%% floor.\n", $percent, $min ) );
 	exit( 1 );
 }

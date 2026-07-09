@@ -1263,6 +1263,14 @@ function force_2fa_bootstrap_self_update() {
 	// a git worktree, where .git is a file) is updated with `git pull`, and letting
 	// WordPress replace it with a release zip would clobber the checkout. A release
 	// build carries no .git, so real installs are unaffected.
+	//
+	// SCOPE: this only detects a .git INSIDE the plugin folder. A deployment that
+	// git-tracks a parent directory (all of wp-content, or the whole site) has no
+	// .git here, so this guard does not fire and self-update stays on — a release
+	// zip could then overwrite the git-managed plugin. For centrally-managed or
+	// parent-tracked deployments, disable self-update explicitly with
+	// FORCE_2FA_DISABLE_SELF_UPDATE (see docs/DEPLOYMENT.md) rather than relying on
+	// this per-folder .git check.
 	if ( file_exists( __DIR__ . '/.git' ) ) {
 		return;
 	}

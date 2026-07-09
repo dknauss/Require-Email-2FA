@@ -29,11 +29,14 @@ It does two things:
    their primary method, and backup codes remain available as a recovery path.
    Enforcement can be scoped with per-role exclusions.
 
-2. **Restricts API logins.** XML-RPC and REST logins bypass the interactive 2FA
-   screen. This plugin permits an API login to skip 2FA only when both the
+2. **Restricts XML-RPC logins.** Non-interactive logins bypass the interactive
+   2FA screen. This plugin permits such a login to skip 2FA only when both the
    account is on an explicit allowlist and the request authenticated with an
-   Application Password (never the real login password). Everyone else is denied
-   on the API path.
+   Application Password (never the real login password); everyone else is denied.
+   Scope note: this allowlist governs XML-RPC, not REST. REST Application Password
+   logins authenticate via WordPress core's determine_current_user path and are
+   never gated by Two Factor, so the allowlist does not restrict them — limit REST
+   access via each account's role/capabilities instead. See the FAQ.
 
 = Plugin dependencies =
 
@@ -131,11 +134,22 @@ add_filter( 'force_2fa_excluded_roles', function () {
 } );
 `
 
-= How do I let an integration log in over the REST API or XML-RPC? =
+= How do I let an integration log in over XML-RPC? =
 
 Add its user ID or login to `FORCE_2FA_API_LOGIN_ALLOWLIST`, and have it
-authenticate with an Application Password. A real-password API login is always
+authenticate with an Application Password. A real-password XML-RPC login is always
 denied, even for allowlisted accounts.
+
+Important: this allowlist governs XML-RPC, not the REST API. Two Factor's only
+API-login gate runs on the `authenticate` filter, which XML-RPC uses; REST
+Application Password logins authenticate via WordPress core's
+`determine_current_user` path and never reach that gate, so the allowlist does not
+restrict them. Any account with an Application Password can authenticate over REST
+regardless of the allowlist. To limit REST access, give each account the least
+role/capabilities it needs (Application Passwords inherit the user's caps), turn
+off Application Passwords for users who shouldn't have them
+(`wp_is_application_passwords_available_for_user`), or add a `rest_authentication_errors`
+gate.
 
 You can also override the effective allowlist without editing this plugin:
 
@@ -210,9 +224,12 @@ without a stronger factor can be locked out until mail is fixed or
 `FORCE_2FA_DISABLE` is enabled. This plugin only enforces the Two Factor plugin
 and does not integrate with other 2FA plugins or enforce MFA inside external SSO
 providers. On multisite it is network-only (per-site activation is blocked); a true
-network-wide guarantee also depends on Two Factor itself being network-active. API
-bypasses are intentionally narrow: only allowlisted accounts using Application
-Passwords can skip the interactive challenge.
+network-wide guarantee also depends on Two Factor itself being network-active. The
+API-login allowlist governs XML-RPC only: an XML-RPC login can skip the interactive
+challenge only for allowlisted accounts using Application Passwords, while REST
+Application Password logins are not gated by Two Factor and are not restricted by
+the allowlist (scope REST access via roles/capabilities). Excluding a role also
+removes those accounts from this API-login gate.
 
 == Changelog ==
 
