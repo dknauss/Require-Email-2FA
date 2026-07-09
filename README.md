@@ -51,18 +51,7 @@ Require Email 2FA's dependency on Two Factor is *soft*: the Require Email 2FA pl
 
    Everyone else is denied.
 
-   > [!IMPORTANT]
-   > **Scope — this allowlist governs XML-RPC, not the REST API.** Two Factor's
-   > only API-login gate runs on the `authenticate` filter, which XML-RPC logins
-   > pass through. REST requests authenticated with an Application Password set the
-   > current user via WordPress core's `determine_current_user` path
-   > (`wp_validate_application_password`) and never touch that filter — so Two
-   > Factor, and therefore this allowlist, does **not** gate them. Any account with
-   > an Application Password can authenticate over the REST API regardless of the
-   > allowlist. To restrict REST access, scope each account's role/capabilities
-   > (Application Passwords inherit the user's caps), disable Application Passwords
-   > for users who shouldn't have them (`wp_is_application_passwords_available_for_user`),
-   > or add a REST-layer gate (`rest_authentication_errors`).
+**Scope — this allowlist governs XML-RPC, not the REST API.** Two Factor's only API-login gate runs on the `authenticate` filter, which XML-RPC logins pass through. REST requests authenticated with an Application Password set the current user via WordPress core's `determine_current_user` path (`wp_validate_application_password`) and never touch that filter — so Two Factor, and therefore this allowlist, does **not** gate them. Any account with allowlist. To restrict REST access, scope each account's role/capabilities (Application Passwords inherit the user's caps), disable Application Passwords for users who shouldn't have them (`wp_is_application_passwords_available_for_user`), or add a REST-layer gate (`rest_authentication_errors`).
 
 > [!IMPORTANT]
 > For security hardening purposes, it's strongly recommended that you set up Require Email 2FA as a mu-plugin if you establish user role exclusions and/or an API user allowlist.
