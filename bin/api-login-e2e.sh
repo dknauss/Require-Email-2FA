@@ -1,26 +1,34 @@
 #!/usr/bin/env bash
 #
-# Real WordPress + real Two Factor end-to-end check for the API-login allowlist.
+# Real WordPress + real Two Factor end-to-end check for the API-login allowlist,
+# exercised over XML-RPC.
 #
-# The allowlist policy — a service account may skip the second factor over the REST
-# API only when it is BOTH allowlisted AND authenticated with an Application Password
-# — is unit-tested in isolation, but nothing proves that the real Two Factor plugin
-# actually invokes our filter, or that core records the app-password user before Two
-# Factor evaluates the gate (the hook-ordering the whole design rests on). This drives
-# genuine authenticated REST requests through a running WordPress to prove it.
+# The allowlist policy — a service account may skip the second factor on an API
+# login only when it is BOTH allowlisted AND authenticated with an Application
+# Password — is unit-tested in isolation, but nothing proves that the real Two
+# Factor plugin invokes our filter, or that core records the app-password user
+# before Two Factor evaluates the gate (the hook ordering the whole design rests on).
 #
-# Uses the SQLite database drop-in and the PHP built-in server (`wp server`), so it
-# needs no MySQL and no Apache. Tooling versions/checksums are pinned in
-# bin/lib/e2e-common.sh. Two Factor is installed from wordpress.org (unpinned), as in
-# the Playground blueprint and the update E2E.
+# Why XML-RPC and not REST: Two Factor's only API-login gate is filter_authenticate()
+# on the 'authenticate' filter (priority 31). XML-RPC logins run through
+# wp_authenticate() and hit that gate; REST Application Password logins authenticate
+# via core's 'determine_current_user' path (wp_validate_application_password) and
+# never touch the 'authenticate' chain, so Two Factor — and therefore this plugin's
+# 'two_factor_user_api_login_enable' filter — does not gate them. The allowlist only
+# constrains the authenticate path (XML-RPC and other non-REST logins); see the note
+# in force-email-two-factor.php. This test targets the path where enforcement runs.
+#
+# Uses the SQLite drop-in and the PHP built-in server. Two Factor is installed from
+# wordpress.org (unpinned), as in the Playground blueprint and the update E2E.
 #
 # Asserts, with two editor users that differ ONLY in allowlist membership:
-#   - control (our plugin inactive): a non-allowlisted user's Application Password
-#     REST login succeeds — the baseline Two Factor allows — so the later denial is
-#     attributable to THIS plugin, not to roles or core, and
-#   - allowlisted account + Application Password  -> 200 (bypass fires), and
-#   - non-allowlisted account + Application Password -> 401 (our filter denies, and
-#     real Two Factor is what blocks it).
+#   - control (our plugin inactive): a non-allowlisted user's app-password XML-RPC
+#     login succeeds, so the later denial is attributable to THIS plugin, and
+#   - allowlisted account + Application Password  -> allowed, and
+#   - non-allowlisted account + Application Password -> denied (real Two Factor
+#     blocks it), and
+#   - allowlisted account + REAL password -> denied (proves condition (b): an
+#     Application Password, not merely allowlist membership, is required).
 #
 # Usage: bin/api-login-e2e.sh
 # Optional env:
@@ -64,7 +72,7 @@ echo "==> Install and activate the real Two Factor plugin (from wordpress.org)"
 wp plugin install two-factor --activate
 
 # Allow Application Passwords over plain http on localhost (core disables them off-SSL
-# by default), so the REST Basic-auth legs below can run without a TLS setup.
+# by default), so the XML-RPC app-password legs below can run without a TLS setup.
 mkdir -p "$WP/wp-content/mu-plugins"
 cat > "$WP/wp-content/mu-plugins/00-app-passwords-available.php" <<'PHP'
 <?php
@@ -73,24 +81,60 @@ add_filter( 'wp_is_application_passwords_available', '__return_true' );
 PHP
 
 echo "==> Create two editor users differing only in allowlist membership"
-wp user create svc   svc@example.com   --role=editor --user_pass=svc-real-pw     >/dev/null
+SVC_REAL_PW="svc-real-pw"
+wp user create svc   svc@example.com   --role=editor --user_pass="$SVC_REAL_PW" >/dev/null
 wp user create other other@example.com --role=editor --user_pass=other-real-pw   >/dev/null
 
 # Mint an Application Password for each (the plaintext is returned once, with spaces).
 SVC_APP="$(wp user application-password create svc   e2e --porcelain)"
 OTHER_APP="$(wp user application-password create other e2e --porcelain)"
 
-# Authenticated, edit-context endpoint: returns 200 only for a real logged-in user.
-# Use the ?rest_route= form, which resolves without a pretty-permalink structure
-# (a fresh install uses plain permalinks, so /wp-json/ 301-redirects).
-ME="${BASE}/?rest_route=/wp/v2/users/me&context=edit"
+# POST an authenticated wp.getUsersBlogs XML-RPC call as "<user>" / "<password>" and
+# echo the raw response body. Success returns a struct containing <name>isAdmin</name>;
+# an auth/2FA denial returns a <fault>.
+xmlrpc_get_users_blogs() {
+  local user="$1" pass="$2"
+  curl -s "${BASE}/xmlrpc.php" -H 'Content-Type: text/xml' --data-binary @- <<XML
+<?xml version="1.0"?>
+<methodCall>
+  <methodName>wp.getUsersBlogs</methodName>
+  <params>
+    <param><value><string>${user}</string></value></param>
+    <param><value><string>${pass}</string></value></param>
+  </params>
+</methodCall>
+XML
+}
+
+assert_allowed() {
+  local label="$1" resp="$2"
+  if printf '%s' "$resp" | grep -q '<fault>'; then
+    echo "FAIL: ${label} expected success, got a fault:" >&2
+    printf '%s\n' "$resp" | head -8 >&2
+    exit 1
+  fi
+  if ! printf '%s' "$resp" | grep -qi 'isAdmin'; then
+    echo "FAIL: ${label} expected a getUsersBlogs struct, got:" >&2
+    printf '%s\n' "$resp" | head -8 >&2
+    exit 1
+  fi
+}
+
+assert_denied() {
+  local label="$1" resp="$2"
+  if ! printf '%s' "$resp" | grep -q '<fault>'; then
+    echo "FAIL: ${label} expected a fault (denied), got:" >&2
+    printf '%s\n' "$resp" | head -8 >&2
+    exit 1
+  fi
+}
 
 start_server() {
   wp server --host="$HOST" --port="$PORT" >"$WORK/server.log" 2>&1 &
   SERVER_PID="$!"
   # Wait for the built-in server to accept connections (up to ~30s).
   for _ in $(seq 1 60); do
-    if curl -fsS -o /dev/null "${BASE}/?rest_route=/" 2>/dev/null; then
+    if curl -fsS -o /dev/null "${BASE}/xmlrpc.php" 2>/dev/null; then
       return 0
     fi
     sleep 0.5
@@ -100,21 +144,12 @@ start_server() {
   exit 1
 }
 
-# HTTP status for a Basic-auth GET of the me-endpoint as "<login>:<app password>".
-status_for() {
-  curl -s -o /dev/null -w '%{http_code}' -u "$1:$2" "$ME"
-}
-
 echo "==> Start the built-in server"
 start_server
 
 echo "==> Control: with THIS plugin inactive, a non-allowlisted app-password login succeeds"
-code="$(status_for other "$OTHER_APP")"
-if [ "$code" != "200" ]; then
-  echo "FAIL: baseline app-password REST login expected 200, got ${code}" >&2
-  exit 1
-fi
-echo "    baseline 200 (Two Factor alone allows app-password API logins)"
+assert_allowed "control (plugin inactive)" "$(xmlrpc_get_users_blogs other "$OTHER_APP")"
+echo "    allowed, as expected (Two Factor alone permits app-password API logins)"
 
 echo "==> Activate Require Email 2FA and allowlist only 'svc'"
 mkdir -p "$WP/wp-content/plugins/force-email-two-factor"
@@ -136,23 +171,16 @@ if ( ! $ok ) { fwrite( STDERR, "FAIL: enforcement precondition not met\n" ); exi
 echo "FORCE2FA_PRECOND_OK\n";
 '
 
-echo "==> Allowlisted account + Application Password must be ALLOWED (200)"
-code="$(status_for svc "$SVC_APP")"
-if [ "$code" != "200" ]; then
-  echo "FAIL: allowlisted app-password login expected 200, got ${code}" >&2
-  exit 1
-fi
-echo "    200, as expected (bypass fires: app-password user recorded, allowlist matched)"
+echo "==> Allowlisted account + Application Password must be ALLOWED"
+assert_allowed "allowlisted + app password" "$(xmlrpc_get_users_blogs svc "$SVC_APP")"
+echo "    allowed, as expected (bypass fires: app-password user recorded, allowlist matched)"
 
-echo "==> Non-allowlisted account + Application Password must be DENIED (401/403)"
-code="$(status_for other "$OTHER_APP")"
-# "Denied" is the security property; accept either unauthorized (401) or forbidden
-# (403) so the test does not turn a Two Factor status-code choice into a false CI
-# failure. What must never happen is a 200 — that would be a real bypass.
-if [ "$code" != "401" ] && [ "$code" != "403" ]; then
-  echo "FAIL: non-allowlisted app-password login expected 401/403, got ${code}" >&2
-  exit 1
-fi
-echo "    ${code}, as expected (real Two Factor blocks the API login our filter denied)"
+echo "==> Non-allowlisted account + Application Password must be DENIED"
+assert_denied "non-allowlisted + app password" "$(xmlrpc_get_users_blogs other "$OTHER_APP")"
+echo "    denied, as expected (real Two Factor blocks the API login our filter denied)"
 
-echo "==> API-login E2E passed."
+echo "==> Allowlisted account + REAL password must be DENIED (Application Password required)"
+assert_denied "allowlisted + real password" "$(xmlrpc_get_users_blogs svc "$SVC_REAL_PW")"
+echo "    denied, as expected (condition (b): a real-password API login never bypasses)"
+
+echo "==> API-login (XML-RPC) E2E passed."
