@@ -87,7 +87,7 @@ jobs:
       - name: Install dev dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
 
-      - name: Test gate (PHPCS + PHPUnit)
+      - name: Test gate (PHPCS + PHPStan + PHPUnit)
         run: composer check
 
       - name: Build plugin zip

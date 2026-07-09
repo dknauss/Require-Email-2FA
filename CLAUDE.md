@@ -18,7 +18,7 @@ Production code is only three files, all procedural PHP with `force_2fa_` / `FOR
 
 ```sh
 composer install          # PHP 8.2+ and Composer 2 required for dev tooling
-composer check            # phpcs + phpunit — run before every PR
+composer check            # phpcs + phpstan + all phpunit suites — run before every PR
 composer test             # vendor/bin/phpunit (unit + integration suites)
 composer phpcs            # WordPress coding standards + PHPCompatibility (7.2-)
 composer phpcbf           # auto-fix phpcs violations

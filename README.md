@@ -554,7 +554,7 @@ composer install
 composer test                       # PHPUnit: unit + integration
 composer phpcs                      # PHPCompatibility (7.2+) + WordPress (full)
 composer phpcbf                     # auto-fix coding-standards issues
-composer check                      # phpcs + tests
+composer check                      # phpcs + phpstan + all tests
 vendor/bin/phpunit --testsuite integration   # one suite
 vendor/bin/phpunit --coverage-text  # coverage (needs Xdebug or PCOV)
 bash bin/multisite-e2e.sh           # disposable real multisite, network-only guard

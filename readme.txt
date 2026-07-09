@@ -351,7 +351,7 @@ from this API-login gate.
 * Admin UX: the dependency notices show the one-click install button only when the
   current user holds every capability its handler needs; otherwise they inform
   without an action that would be denied.
-* Release workflow: run the PHPCS + PHPUnit gate against the tagged commit before
+* Release workflow: run the PHPCS + PHPStan + PHPUnit gate against the tagged commit before
   building and publishing the update asset.
 * Self-updates from a git working copy are skipped (a `.git` present), so a dev
   clone is not overwritten by a release zip.

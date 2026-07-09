@@ -29,6 +29,7 @@
         "phpstan": "phpstan analyse --memory-limit=1G",
         "check": [
             "@phpcs",
+            "@phpstan",
             "@test",
             "@test:no-two-factor"
         ]
