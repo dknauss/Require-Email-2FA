@@ -662,14 +662,12 @@ function force_2fa_filter_api_login_enable( $enable, $user ) {
 	// (a) ...and only for named service accounts.
 	return force_2fa_user_is_api_allowlisted( $user );
 }
-// The notice and the one-click installer are admin glue: they call WordPress
-// admin/upgrader APIs that the zero-dependency unit bootstrap does not stub, and
-// are only ever invoked through the admin hooks (never at load), so they cannot
-// fatally a unit run. Their behaviour is exercised by the Playground integration
-// test (a real activation with Two Factor absent), mirroring the load-time guards
-// above. The pure decisions they delegate to — force_2fa_should_nag() and
-// force_2fa_required_install_caps() — are unit-tested directly.
-// @codeCoverageIgnoreStart
+// The dependency-notice renderers below select which notice/label/body to emit and
+// are unit-tested with a stubbed admin surface (see tests/DependencyNoticeTest.php
+// and tests/DependencyNoticeAbsentTest.php). The genuinely untestable spans — the
+// activation-guard glue and the one-click installer's upgrader body, which call
+// WordPress admin/upgrader APIs the zero-dependency bootstrap does not stub — carry
+// their own narrower @codeCoverageIgnore markers and are exercised by the E2E jobs.
 
 /**
  * Whether the current user can complete the one-click dependency install/activate.
@@ -895,6 +893,9 @@ function force_2fa_network_dependency_notice() {
  *
  * @param bool $network_wide Whether the activation is network-wide.
  */
+// @codeCoverageIgnoreStart
+// Glue-only: the pure decision is force_2fa_activation_blocked() (unit-tested); the
+// deactivate_plugins()/wp_die() rollback is exercised by bin/multisite-e2e.sh.
 function force_2fa_block_single_site_activation( $network_wide ) {
 	if ( ! force_2fa_activation_blocked( is_multisite(), $network_wide ) ) {
 		return;
@@ -909,6 +910,7 @@ function force_2fa_block_single_site_activation( $network_wide ) {
 		array( 'back_link' => true )
 	);
 }
+// @codeCoverageIgnoreEnd
 
 /**
  * Handle the one-click "Install & activate Two Factor" action.
@@ -935,6 +937,10 @@ function force_2fa_handle_install_two_factor() {
 		}
 	}
 
+	// Upgrader body: WordPress admin/upgrader APIs the unit bootstrap does not stub.
+	// The front gate above (nonce + capability wall) is unit-tested; this install/
+	// activate path is exercised by the Playground install-handler E2E.
+	// @codeCoverageIgnoreStart
 	require_once ABSPATH . 'wp-admin/includes/file.php';
 	require_once ABSPATH . 'wp-admin/includes/misc.php';
 	require_once ABSPATH . 'wp-admin/includes/plugin.php';

@@ -139,6 +139,78 @@ function current_user_can( $cap ) {
 	return true;
 }
 
+// --- Notice / install-handler glue stubs --------------------------------------
+// Enough of the WordPress admin surface for the dependency-notice renderers and
+// the one-click install handler to run under output buffering, so the branch that
+// *selects* which notice/label/body to emit is unit-tested (the pure decisions it
+// delegates to are tested separately). Escapers pass through unchanged; URL helpers
+// return deterministic strings so a test can assert the nonce action and target.
+
+// Plugins directory. Points at a per-run temp dir the tests populate, so the
+// on-disk "is Two Factor installed?" check (file_exists) is controllable. The
+// TestCase creates/removes two-factor/two-factor.php under here to toggle state.
+if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
+	define( 'WP_PLUGIN_DIR', sys_get_temp_dir() . '/force2fa-test-plugins' );
+}
+
+function esc_html( $text ) {
+	return $text;
+}
+function esc_html__( $text, $domain = 'default' ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress core stub.
+	return $text;
+}
+function esc_attr( $text ) {
+	return $text;
+}
+function esc_url( $url ) {
+	return $url;
+}
+function admin_url( $path = '' ) {
+	return 'http://example.test/wp-admin/' . $path;
+}
+function network_admin_url( $path = '' ) {
+	return 'http://example.test/wp-admin/network/' . $path;
+}
+function wp_nonce_url( $url, $action = -1 ) {
+	return $url . ( strpos( $url, '?' ) === false ? '?' : '&' ) . '_wpnonce=' . rawurlencode( (string) $action );
+}
+function plugin_basename( $file ) {
+	return basename( dirname( $file ) ) . '/' . basename( $file );
+}
+
+// is_plugin_active_for_network(): driven by a global so the network notices can be
+// pointed at "Two Factor is / isn't network-active". Keyed by plugin file.
+function is_plugin_active_for_network( $plugin ) {
+	return ! empty( $GLOBALS['__force2fa_network_active'][ $plugin ] );
+}
+
+// get_option(): only 'active_plugins' matters here (per-site active list). Driven
+// by a global; defaults to the passed default.
+function get_option( $name, $default_value = false ) {
+	if ( array_key_exists( $name, $GLOBALS['__force2fa_options'] ?? array() ) ) {
+		return $GLOBALS['__force2fa_options'][ $name ];
+	}
+	return $default_value;
+}
+
+// Nonce verification for the install handler. Driven by a global so a test can
+// simulate a bad/missing nonce; defaults to valid.
+function check_admin_referer( $action = -1, $query_arg = '_wpnonce' ) {
+	if ( isset( $GLOBALS['__force2fa_nonce_ok'] ) && ! $GLOBALS['__force2fa_nonce_ok'] ) {
+		throw new \Force2FA_WpDieException( 'nonce check failed' );
+	}
+	return true;
+}
+
+// wp_die(): the plugin's hard stop. Throw so a test can assert the handler bailed
+// (e.g. the capability wall) and capture the message, instead of killing PHP.
+function wp_die( $message = '', $title = '', $args = array() ) {
+	throw new \Force2FA_WpDieException( is_scalar( $message ) ? (string) $message : '' );
+}
+
+/** Thrown by the wp_die()/check_admin_referer() stubs so tests can assert a hard stop. */
+class Force2FA_WpDieException extends \RuntimeException {}
+
 // --- WordPress class stubs ----------------------------------------------------
 
 if ( ! class_exists( 'WP_User' ) ) {

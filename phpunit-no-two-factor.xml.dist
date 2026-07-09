@@ -18,6 +18,8 @@
     <testsuites>
         <testsuite name="dependency-absent">
             <file>tests/DependencyAbsentTest.php</file>
+            <file>tests/DependencyNoticeAbsentTest.php</file>
+            <file>tests/InstallHandlerTest.php</file>
         </testsuite>
     </testsuites>
 </phpunit>
