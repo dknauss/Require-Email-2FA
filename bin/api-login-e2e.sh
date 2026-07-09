@@ -132,9 +132,11 @@ assert_denied() {
 start_server() {
   wp server --host="$HOST" --port="$PORT" >"$WORK/server.log" 2>&1 &
   SERVER_PID="$!"
-  # Wait for the built-in server to accept connections (up to ~30s).
+  # Wait for the built-in server to accept connections (up to ~30s). Probe the home
+  # page, not xmlrpc.php: the latter answers a GET with 405 (POST-only), which -f
+  # would treat as "not ready" forever.
   for _ in $(seq 1 60); do
-    if curl -fsS -o /dev/null "${BASE}/xmlrpc.php" 2>/dev/null; then
+    if curl -fsS -o /dev/null "${BASE}/" 2>/dev/null; then
       return 0
     fi
     sleep 0.5
