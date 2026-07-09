@@ -6,7 +6,7 @@
  * Description:      Requires the Two Factor plugin and makes emailed 2FA the default, required login factor for all users.
  * Author:           Pixel
  * Author URI:       https://wearepixel.ca
- * Version:          1.10.5
+ * Version:          1.10.6
  * Requires PHP:     7.2
  * License:          GPL-2.0-or-later
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
@@ -111,7 +111,7 @@ if ( defined( 'FORCE_2FA_DISABLE' ) && FORCE_2FA_DISABLE ) {
 if ( defined( 'FORCE_2FA_LOADED' ) ) {
 	return;
 }
-define( 'FORCE_2FA_LOADED', '1.10.5' );
+define( 'FORCE_2FA_LOADED', '1.10.6' );
 // @codeCoverageIgnoreEnd
 
 /**

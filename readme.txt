@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.10.5
+Stable tag: 1.10.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -239,6 +239,20 @@ cover REST is on the roadmap (issue #41). Excluding a role also removes those ac
 from this API-login gate.
 
 == Changelog ==
+
+= 1.10.6 =
+* Docs: added a "Security model" section stating plainly what the plugin enforces
+  and — importantly — what it does not. The API-login allowlist governs XML-RPC,
+  NOT the REST API: REST Application Password logins authenticate via WordPress
+  core's determine_current_user path and are not gated by Two Factor or the
+  allowlist. Corrected the README/readme where they implied REST was covered, added
+  guidance to scope REST access via roles/capabilities, and added plain-language
+  lead sentences to the rollout checklist.
+* Tests: substantially expanded unit and end-to-end coverage — the Two-Factor-absent
+  fail-safe, dependency-notice rendering, install-handler guards, the emergency
+  kill switch and mu-loader behavior, the XML-RPC API-login allowlist, and the
+  one-click installer — plus a combined-coverage floor check in CI.
+* No change to enforcement behavior — functionally identical to 1.10.5.
 
 = 1.10.5 =
 * Uninstall cleanup: deleting the plugin now removes the only persistent data it
