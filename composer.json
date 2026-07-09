@@ -23,12 +23,14 @@
     },
     "scripts": {
         "test": "phpunit",
+        "test:no-two-factor": "phpunit -c phpunit-no-two-factor.xml.dist",
         "phpcs": "phpcs",
         "phpcbf": "phpcbf",
         "phpstan": "phpstan analyse --memory-limit=1G",
         "check": [
             "@phpcs",
-            "@test"
+            "@test",
+            "@test:no-two-factor"
         ]
     }
 }

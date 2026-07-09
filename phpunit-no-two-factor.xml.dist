@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Separate PHPUnit config for the "Two Factor absent" fail-safe suite. It uses a
+    bootstrap that suppresses the Two Factor class stubs (see
+    tests/bootstrap-no-two-factor.php), which a single process cannot do after the
+    default bootstrap has defined them — hence a distinct config and invocation.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap-no-two-factor.php"
+         colors="true"
+         cacheDirectory=".phpunit.cache">
+    <source>
+        <include>
+            <file>force-email-two-factor.php</file>
+        </include>
+    </source>
+    <testsuites>
+        <testsuite name="dependency-absent">
+            <file>tests/DependencyAbsentTest.php</file>
+        </testsuite>
+    </testsuites>
+</phpunit>

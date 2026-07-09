@@ -155,9 +155,11 @@ if ( ! class_exists( 'WP_User' ) ) {
 	}
 }
 
-// Present by default so the enforcement filter takes its append path; the
-// class-absent guard is exercised manually rather than in unit tests.
-if ( ! class_exists( 'Two_Factor_Email' ) ) {
+// Present by default so the enforcement filter takes its append path. The
+// class-absent guard in force_2fa_dependency_met() is exercised by the separate
+// bootstrap-no-two-factor.php run, which defines FORCE2FA_TEST_NO_TWO_FACTOR to
+// suppress both Two Factor stubs and simulate the plugin being inactive/removed.
+if ( ! defined( 'FORCE2FA_TEST_NO_TWO_FACTOR' ) && ! class_exists( 'Two_Factor_Email' ) ) {
 	class Two_Factor_Email {}
 }
 
@@ -167,7 +169,7 @@ if ( ! class_exists( 'Two_Factor_Email' ) ) {
 // primary provider is the first enabled one, and a user "uses 2FA" when a primary
 // provider exists. We feed providers through the plugin's own filter callback so
 // the test exercises real enforcement behaviour, not a reimplementation of it.
-if ( ! class_exists( 'Two_Factor_Core' ) ) {
+if ( ! defined( 'FORCE2FA_TEST_NO_TWO_FACTOR' ) && ! class_exists( 'Two_Factor_Core' ) ) {
 	class Two_Factor_Core {
 		/**
 		 * Registered providers, keyed by class name. Defaults to Email present (the

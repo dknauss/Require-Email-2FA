@@ -31,6 +31,24 @@ If you are validating coverage locally, use PCOV or Xdebug:
 vendor/bin/phpunit --coverage-text
 ```
 
+### How the tests are layered
+
+- **Pure decisions** (role/allowlist logic, notice-copy selection, status
+  classification) are unit-tested against a zero-dependency stub harness in
+  `tests/bootstrap.php` — no WordPress install required.
+- **Behavior against real WordPress** (network-only activation, uninstall
+  cleanup, self-updates) is covered by the end-to-end scripts under `bin/` and
+  the Playground blueprints under `playground/`, which CI runs.
+- The **"Two Factor absent" fail-safe** runs as a second PHPUnit invocation with
+  its own config so the Two Factor class stubs can be suppressed (one process
+  cannot un-define a class once the default bootstrap has declared them):
+
+  ```sh
+  vendor/bin/phpunit -c phpunit-no-two-factor.xml.dist
+  ```
+
+  `composer check` runs both invocations.
+
 ## What good changes look like
 
 - Preserve existing users' stronger factors (TOTP, WebAuthn, backup codes).

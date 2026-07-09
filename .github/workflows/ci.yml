@@ -75,6 +75,8 @@ jobs:
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: PHPUnit (unit + integration)
         run: vendor/bin/phpunit
+      - name: PHPUnit (Two Factor absent fail-safe)
+        run: vendor/bin/phpunit -c phpunit-no-two-factor.xml.dist
 
   coverage:
     name: Coverage (PHP 8.3)
