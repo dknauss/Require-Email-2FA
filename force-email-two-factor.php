@@ -383,42 +383,6 @@ function force_2fa_activation_blocked( $is_multisite, $network_wide ) {
 const FORCE_2FA_EXCLUDED_ROLES = array();
 
 /**
- * Optional "blocking" enforcement: require users to CONFIGURE 2FA before they can
- * use the site, instead of the default soft floor (Email auto-appended at login).
- *
- * Default is false → soft enforcement (this plugin's normal behaviour): the Email
- * provider is appended so the login challenge fires for everyone, but a user who
- * has never set up 2FA is not otherwise obstructed. Set to true to additionally
- * gate the site: a logged-in, non-exempt user who has not explicitly enabled ANY
- * provider in their Two Factor profile is redirected to their profile page (where
- * Two Factor's own setup UI lives) until they enable one.
- *
- *     const FORCE_2FA_BLOCKING_MODE = true;
- *
- * or, without editing this file, via the 'force_2fa_blocking_mode_enabled' filter.
- *
- * Design notes (why this is safe, unlike a naive "block everything" gate):
- *   - It sends users to the REAL Two Factor setup UI on their profile and keys
- *     "configured" off Two Factor's own stored meta (_two_factor_enabled_providers),
- *     so configuration actually persists and the gate then releases — no dead-end.
- *   - The profile/user-edit screens, plus AJAX / REST / cron / XML-RPC / WP-CLI, are
- *     never gated (see force_2fa_request_is_gateable): those are exactly the paths
- *     Two Factor's setup flows (TOTP QR verify, WebAuthn register, backup codes) run
- *     on, so gating them would make setup impossible. Only interactive page loads
- *     are redirected.
- *   - Excluded roles (FORCE_2FA_EXCLUDED_ROLES) and the FORCE_2FA_DISABLE kill switch
- *     bypass it, and it no-ops entirely when Two Factor is inactive (so it can never
- *     lock a site with no way to configure 2FA).
- *
- * WARNING: blocking mode adds real friction and, like all Email-2FA enforcement,
- * depends on working outbound mail. Verify mail delivery and keep a known-good admin
- * session (or FORCE_2FA_DISABLE) on hand before enabling on production.
- *
- * @var bool Whether to require explicit 2FA setup before granting site access.
- */
-const FORCE_2FA_BLOCKING_MODE = false;
-
-/**
  * Effective list of excluded role slugs.
  *
  * Defaults to the FORCE_2FA_EXCLUDED_ROLES constant; the 'force_2fa_excluded_roles'
@@ -432,16 +396,46 @@ function force_2fa_excluded_roles() {
 }
 
 /**
- * Whether blocking mode is enabled.
+ * Whether optional "blocking" enforcement is enabled.
  *
- * Defaults to the FORCE_2FA_BLOCKING_MODE constant; the 'force_2fa_blocking_mode_enabled'
- * filter overrides it at runtime (e.g. environment-specific config) and makes the value
- * injectable for unit tests. See FORCE_2FA_BLOCKING_MODE for the behaviour it gates.
+ * Default is OFF → this plugin's normal soft floor: the Email provider is appended so
+ * the login challenge fires for everyone, but a user who has never set up 2FA is not
+ * otherwise obstructed. Turn blocking mode ON to additionally gate the site — a
+ * logged-in, non-exempt user who has not explicitly enabled ANY provider in their Two
+ * Factor profile is redirected to their profile page (where Two Factor's own setup UI
+ * lives) until they enable one.
+ *
+ * Enable it from wp-config.php (checked with defined(), NOT declared here as a const —
+ * so, like FORCE_2FA_DISABLE, defining it in wp-config can never clash with a plugin-side
+ * declaration):
+ *
+ *     define( 'FORCE_2FA_BLOCKING_MODE', true );
+ *
+ * or, without touching wp-config, via the 'force_2fa_blocking_mode_enabled' filter (also
+ * how tests inject it).
+ *
+ * Design notes (why this is safe, unlike a naive "block everything" gate):
+ *   - It sends users to the REAL Two Factor setup UI on their profile and keys
+ *     "configured" off Two Factor's own stored meta (_two_factor_enabled_providers),
+ *     so configuration actually persists and the gate then releases — no dead-end.
+ *   - The profile/user-edit screens, plus AJAX / REST / cron / XML-RPC / WP-CLI, are
+ *     never gated (see force_2fa_request_is_gateable): those are exactly the paths Two
+ *     Factor's setup flows (TOTP QR verify, WebAuthn register, backup codes) run on, so
+ *     gating them would make setup impossible. Only interactive page loads are redirected.
+ *   - Excluded roles (FORCE_2FA_EXCLUDED_ROLES) and the FORCE_2FA_DISABLE kill switch
+ *     bypass it, and it no-ops entirely when Two Factor is inactive (so it can never lock
+ *     a site with no way to configure 2FA).
+ *
+ * WARNING: blocking mode adds real friction and, like all Email-2FA enforcement, depends
+ * on working outbound mail. Verify mail delivery and keep a known-good admin session (or
+ * FORCE_2FA_DISABLE) on hand before enabling on production.
  *
  * @return bool
  */
 function force_2fa_blocking_mode_enabled() {
-	return (bool) apply_filters( 'force_2fa_blocking_mode_enabled', FORCE_2FA_BLOCKING_MODE );
+	$enabled = defined( 'FORCE_2FA_BLOCKING_MODE' ) && FORCE_2FA_BLOCKING_MODE;
+
+	return (bool) apply_filters( 'force_2fa_blocking_mode_enabled', $enabled );
 }
 
 /**

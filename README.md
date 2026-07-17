@@ -156,10 +156,22 @@ login challenge fires for everyone, but a user who has never set up 2FA is not
 otherwise obstructed. **Blocking mode** additionally requires users to *configure*
 a factor before they can use the site.
 
-Default is **off**. Enable it with a constant in `wp-config.php`:
+> [!TIP]
+> **▶ [Try blocking mode live in WordPress Playground][blocking-playground]** — boots a
+> disposable WordPress with Two Factor and this plugin active **and blocking mode turned
+> on**. You land logged in as an admin who hasn't set up 2FA yet, so you are immediately
+> redirected to your **Profile** with the *"Two-factor authentication is required"*
+> notice. Enable any method under **Two-Factor Options** and save — the gate releases and
+> you can use the site. A sample unconfigured editor (`alice`) is included to try the
+> same first-run flow as a non-admin. Nothing is saved; blocking mode stays **off** in a
+> normal install — the demo enables it only to showcase the feature.
+
+[blocking-playground]: https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/dknauss/Require-Email-2FA/main/playground/blocking-mode-blueprint.json
+
+Default is **off**. Enable it in `wp-config.php`:
 
 ```php
-const FORCE_2FA_BLOCKING_MODE = true;
+define( 'FORCE_2FA_BLOCKING_MODE', true );
 ```
 
 Or, without editing the plugin file, via filter (e.g. only in production):
