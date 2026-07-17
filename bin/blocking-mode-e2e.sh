@@ -50,7 +50,8 @@ cp "$PLUGIN_DIR/force-email-two-factor.php" "$WP/wp-content/plugins/force-email-
 wp plugin activate force-email-two-factor
 
 echo "==> Create an unconfigured editor user"
-wp user create alice alice@example.com --role=editor --user_pass=pw --skip-email >/dev/null
+# wp user create does not email unless --send-email is passed, so no skip flag needed.
+wp user create alice alice@example.com --role=editor --user_pass=pw >/dev/null
 
 echo "==> Enable blocking mode"
 wp config set FORCE_2FA_BLOCKING_MODE true --raw
