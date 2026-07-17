@@ -123,6 +123,29 @@ final class BlockingModeTest extends TestCase {
 		$this->assertFalse( force_2fa_request_is_gateable( false, false, false, false, false, true ) );
 	}
 
+	// --- force_2fa_screen_is_own_setup() (the user-edit.php privilege guard) ---
+
+	public function test_profile_php_is_always_own_setup(): void {
+		$this->assertTrue( force_2fa_screen_is_own_setup( 'profile.php', 0, 7 ) );
+	}
+
+	public function test_user_edit_of_self_is_own_setup(): void {
+		$this->assertTrue( force_2fa_screen_is_own_setup( 'user-edit.php', 7, 7 ) );
+	}
+
+	public function test_user_edit_of_another_user_is_not_own_setup(): void {
+		// Editing someone else must stay gated — this is the P1 fix.
+		$this->assertFalse( force_2fa_screen_is_own_setup( 'user-edit.php', 9, 7 ) );
+	}
+
+	public function test_user_edit_with_no_current_user_is_not_own_setup(): void {
+		$this->assertFalse( force_2fa_screen_is_own_setup( 'user-edit.php', 0, 0 ) );
+	}
+
+	public function test_other_admin_page_is_not_own_setup(): void {
+		$this->assertFalse( force_2fa_screen_is_own_setup( 'users.php', 7, 7 ) );
+	}
+
 	// --- hook wiring ---------------------------------------------------------
 
 	public function test_register_hooks_wires_the_blocking_gate(): void {

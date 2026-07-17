@@ -883,6 +883,31 @@ function force_2fa_encode_mail_from_name( $from_name ) {
 	return mb_encode_mimeheader( $from_name, 'UTF-8', 'B', '' );
 }
 
+/**
+ * Pure decision: is this admin page the CURRENT user's own 2FA setup screen?
+ *
+ * The personal profile (profile.php) always is. user-edit.php is the admin screen for
+ * editing OTHER users, so it is a setup screen ONLY when the edited user is the current
+ * user (a self-edit, which core normally routes to profile.php anyway). Exempting
+ * user-edit.php wholesale would let an unconfigured user who holds edit_users operate the
+ * Users editor on other accounts without first configuring their own 2FA. Split out so
+ * this security-relevant exemption is unit-tested.
+ *
+ * @param string $pagenow         Current admin page basename (e.g. 'profile.php').
+ * @param int    $edited_user_id  The user_id being edited on user-edit.php (0 if none).
+ * @param int    $current_user_id The current user's ID (0 if not logged in).
+ * @return bool
+ */
+function force_2fa_screen_is_own_setup( $pagenow, $edited_user_id, $current_user_id ) {
+	if ( 'profile.php' === $pagenow ) {
+		return true;
+	}
+	if ( 'user-edit.php' === $pagenow ) {
+		return (int) $current_user_id > 0 && (int) $edited_user_id === (int) $current_user_id;
+	}
+	return false;
+}
+
 // The blocking-mode request glue redirects real browser requests and calls
 // wp_get_current_user()/wp_safe_redirect()/exit — WordPress runtime the
 // zero-dependency unit bootstrap does not stub, and only ever reached through the
@@ -893,11 +918,12 @@ function force_2fa_encode_mail_from_name( $from_name ) {
 // @codeCoverageIgnoreStart
 
 /**
- * Whether the current admin screen is where a user configures 2FA.
+ * Whether the current admin screen is where THIS user configures their own 2FA.
  *
- * True on the profile / user-edit pages, which host Two Factor's own setup UI and must
- * never be gated (else blocking mode is a dead-end). Front-end requests are never a
- * "setup screen", so they always gate through to the redirect.
+ * The personal profile (and a self-targeted user-edit) hosts Two Factor's setup UI and
+ * must never be gated (else blocking mode is a dead-end). Editing ANOTHER user on
+ * user-edit.php is not a setup screen and stays gated (see force_2fa_screen_is_own_setup).
+ * Front-end requests are never a setup screen, so they always gate through to the redirect.
  *
  * @return bool
  */
@@ -906,7 +932,10 @@ function force_2fa_is_setup_screen() {
 		return false;
 	}
 	$pagenow = isset( $GLOBALS['pagenow'] ) ? (string) $GLOBALS['pagenow'] : '';
-	return in_array( $pagenow, array( 'profile.php', 'user-edit.php' ), true );
+	// Read-only routing check to decide gating; no state change, so no nonce is involved.
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	$edited = isset( $_GET['user_id'] ) ? (int) $_GET['user_id'] : 0;
+	return force_2fa_screen_is_own_setup( $pagenow, $edited, get_current_user_id() );
 }
 
 /**
@@ -956,7 +985,11 @@ function force_2fa_enforce_setup_gate() {
 		return;
 	}
 
-	$profile_url = get_edit_profile_url( (int) $user->ID );
+	// Build the real admin profile URL directly. get_edit_profile_url() is filterable
+	// ('edit_profile_url') and a plugin could point it at a front-end account page that
+	// is neither exempt (force_2fa_is_setup_screen) nor hosts Two Factor's setup UI —
+	// which would loop the redirect or strand the user — so target profile.php explicitly.
+	$profile_url = admin_url( 'profile.php' );
 	wp_safe_redirect( add_query_arg( 'force_2fa_setup_required', '1', $profile_url ) );
 	exit;
 }

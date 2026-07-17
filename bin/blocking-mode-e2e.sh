@@ -83,8 +83,13 @@ echo "    OK unconfigured alice is gated on page loads, exempt on setup/API path
 echo "==> Enable a real provider for alice via Two Factor, then assert the gate releases"
 wp eval '
 $u = get_user_by( "email", "alice@example.com" );
-// Enable the Email provider the way Two Factor does (persist its enabled-providers meta).
-Two_Factor_Core::enable_provider_for_user( $u->ID, "Two_Factor_Email" );
+// Enable TOTP — a provider this plugin does NOT inject via the
+// two_factor_enabled_providers_for_user filter. (Enabling Two_Factor_Email would be a
+// no-op: the filter already reports Email as enabled, so Two Factor short-circuits
+// without writing _two_factor_enabled_providers, and the assertion below would never
+// see a real configuration.) enable_provider_for_user() persists the enabled-providers
+// meta through Two Factor is own path.
+Two_Factor_Core::enable_provider_for_user( $u->ID, "Two_Factor_Totp" );
 clean_user_cache( $u->ID );
 if ( ! force_2fa_user_has_configured_2fa( $u ) ) { fwrite( STDERR, "FAIL: alice should read as configured after enabling a provider\n" ); exit( 1 ); }
 $need = force_2fa_should_require_setup( force_2fa_blocking_mode_enabled(), force_2fa_dependency_met(), true, force_2fa_user_is_exempt( $u ), force_2fa_user_has_configured_2fa( $u ) );
