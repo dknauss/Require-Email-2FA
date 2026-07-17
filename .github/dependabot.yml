@@ -5,6 +5,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Batch the weekly dev-tooling bumps into a single PR. With branch protection
+    # set to strict + enforce_admins, one grouped PR means one merge instead of a
+    # serial update-branch / re-run / merge dance across N separate PRs.
+    groups:
+      composer:
+        patterns:
+          - "*"
     labels:
       - dependencies
       - composer
@@ -13,6 +20,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Same rationale: all Action SHA bumps land in one reviewable PR.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
     labels:
       - dependencies
       - github-actions
