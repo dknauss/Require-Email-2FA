@@ -14,6 +14,7 @@ abstract class TestCase extends BaseTestCase {
 		parent::setUp();
 		$GLOBALS['__force2fa_filters']       = array();
 		$GLOBALS['__force2fa_users']         = array();
+		$GLOBALS['__force2fa_user_meta']     = array();
 		$GLOBALS['__force2fa_did_action']    = array();
 		$GLOBALS['__force2fa_added_filters'] = array();
 		$GLOBALS['__force2fa_added_actions'] = array();
@@ -75,6 +76,11 @@ abstract class TestCase extends BaseTestCase {
 		$user = new \WP_User( $id, $login, $roles );
 		$GLOBALS['__force2fa_users'][ $id ] = $user;
 		return $user;
+	}
+
+	/** Set a single-value user meta that get_user_meta( $id, $key, true ) will return. */
+	protected function userMeta( int $id, string $key, $value ): void {
+		$GLOBALS['__force2fa_user_meta'][ $id ][ $key ] = $value;
 	}
 
 	/** Override a filter's return value (what apply_filters() yields for $hook). */

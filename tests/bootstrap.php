@@ -12,6 +12,7 @@ define( 'ABSPATH', __DIR__ . '/' ); // satisfies the plugin's `defined('ABSPATH'
 
 $GLOBALS['__force2fa_filters']        = array(); // hook => override return value
 $GLOBALS['__force2fa_users']          = array(); // id => WP_User
+$GLOBALS['__force2fa_user_meta']      = array(); // id => [ key => value ]
 $GLOBALS['__force2fa_did_action']     = array(); // hook => count
 $GLOBALS['__force2fa_added_filters']  = array(); // [ tag, cb, priority, accepted_args ]
 $GLOBALS['__force2fa_added_actions']  = array(); // [ tag, cb, priority, accepted_args ]
@@ -52,6 +53,14 @@ function apply_filters( $hook, $value = null ) {
 
 function get_userdata( $user_id ) {
 	return $GLOBALS['__force2fa_users'][ $user_id ] ?? false;
+}
+
+// Per-user meta, driven by a global a test sets via TestCase::userMeta(). Only the
+// single-value form ($single = true) the plugin uses is modelled; returns '' when
+// unset, mirroring WordPress's default for a missing single meta value.
+function get_user_meta( $user_id, $key = '', $single = false ) {
+	$value = $GLOBALS['__force2fa_user_meta'][ $user_id ][ $key ] ?? '';
+	return $single ? $value : ( '' === $value ? array() : array( $value ) );
 }
 
 function did_action( $hook ) {

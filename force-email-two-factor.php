@@ -6,7 +6,7 @@
  * Description:      Requires the Two Factor plugin and makes emailed 2FA the default, required login factor for all users.
  * Author:           Pixel
  * Author URI:       https://wearepixel.ca
- * Version:          1.10.6
+ * Version:          1.11.0
  * Requires PHP:     7.2
  * License:          GPL-2.0-or-later
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
@@ -111,7 +111,7 @@ if ( defined( 'FORCE_2FA_DISABLE' ) && FORCE_2FA_DISABLE ) {
 if ( defined( 'FORCE_2FA_LOADED' ) ) {
 	return;
 }
-define( 'FORCE_2FA_LOADED', '1.10.6' );
+define( 'FORCE_2FA_LOADED', '1.11.0' );
 // @codeCoverageIgnoreEnd
 
 /**
@@ -383,6 +383,42 @@ function force_2fa_activation_blocked( $is_multisite, $network_wide ) {
 const FORCE_2FA_EXCLUDED_ROLES = array();
 
 /**
+ * Optional "blocking" enforcement: require users to CONFIGURE 2FA before they can
+ * use the site, instead of the default soft floor (Email auto-appended at login).
+ *
+ * Default is false → soft enforcement (this plugin's normal behaviour): the Email
+ * provider is appended so the login challenge fires for everyone, but a user who
+ * has never set up 2FA is not otherwise obstructed. Set to true to additionally
+ * gate the site: a logged-in, non-exempt user who has not explicitly enabled ANY
+ * provider in their Two Factor profile is redirected to their profile page (where
+ * Two Factor's own setup UI lives) until they enable one.
+ *
+ *     const FORCE_2FA_BLOCKING_MODE = true;
+ *
+ * or, without editing this file, via the 'force_2fa_blocking_mode_enabled' filter.
+ *
+ * Design notes (why this is safe, unlike a naive "block everything" gate):
+ *   - It sends users to the REAL Two Factor setup UI on their profile and keys
+ *     "configured" off Two Factor's own stored meta (_two_factor_enabled_providers),
+ *     so configuration actually persists and the gate then releases — no dead-end.
+ *   - The profile/user-edit screens, plus AJAX / REST / cron / XML-RPC / WP-CLI, are
+ *     never gated (see force_2fa_request_is_gateable): those are exactly the paths
+ *     Two Factor's setup flows (TOTP QR verify, WebAuthn register, backup codes) run
+ *     on, so gating them would make setup impossible. Only interactive page loads
+ *     are redirected.
+ *   - Excluded roles (FORCE_2FA_EXCLUDED_ROLES) and the FORCE_2FA_DISABLE kill switch
+ *     bypass it, and it no-ops entirely when Two Factor is inactive (so it can never
+ *     lock a site with no way to configure 2FA).
+ *
+ * WARNING: blocking mode adds real friction and, like all Email-2FA enforcement,
+ * depends on working outbound mail. Verify mail delivery and keep a known-good admin
+ * session (or FORCE_2FA_DISABLE) on hand before enabling on production.
+ *
+ * @var bool Whether to require explicit 2FA setup before granting site access.
+ */
+const FORCE_2FA_BLOCKING_MODE = false;
+
+/**
  * Effective list of excluded role slugs.
  *
  * Defaults to the FORCE_2FA_EXCLUDED_ROLES constant; the 'force_2fa_excluded_roles'
@@ -393,6 +429,19 @@ const FORCE_2FA_EXCLUDED_ROLES = array();
  */
 function force_2fa_excluded_roles() {
 	return (array) apply_filters( 'force_2fa_excluded_roles', FORCE_2FA_EXCLUDED_ROLES );
+}
+
+/**
+ * Whether blocking mode is enabled.
+ *
+ * Defaults to the FORCE_2FA_BLOCKING_MODE constant; the 'force_2fa_blocking_mode_enabled'
+ * filter overrides it at runtime (e.g. environment-specific config) and makes the value
+ * injectable for unit tests. See FORCE_2FA_BLOCKING_MODE for the behaviour it gates.
+ *
+ * @return bool
+ */
+function force_2fa_blocking_mode_enabled() {
+	return (bool) apply_filters( 'force_2fa_blocking_mode_enabled', FORCE_2FA_BLOCKING_MODE );
 }
 
 /**
@@ -678,6 +727,282 @@ function force_2fa_filter_api_login_enable( $enable, $user ) {
 	// (a) ...and only for named service accounts.
 	return force_2fa_user_is_api_allowlisted( $user );
 }
+
+/**
+ * The user-meta key Two Factor uses to store a user's explicitly enabled providers.
+ *
+ * Prefer the plugin's own class constant when it is loaded (so we track any future
+ * rename), falling back to the documented literal when it is not.
+ *
+ * @return string
+ */
+function force_2fa_enabled_providers_meta_key() {
+	if ( defined( 'Two_Factor_Core::ENABLED_PROVIDERS_USER_META_KEY' ) ) {
+		return (string) constant( 'Two_Factor_Core::ENABLED_PROVIDERS_USER_META_KEY' );
+	}
+	return '_two_factor_enabled_providers';
+}
+
+/**
+ * Whether a stored providers meta value indicates the user configured 2FA themselves.
+ *
+ * This is the pure decision behind force_2fa_user_has_configured_2fa(): a non-empty
+ * ARRAY means the user explicitly enabled at least one provider in their profile.
+ * Anything else (unset '', false, a scalar) means they have not — the Email floor this
+ * plugin appends at runtime via the 'two_factor_enabled_providers_for_user' filter is
+ * NOT written to this meta, so it never counts as "configured". Unit-tested directly.
+ *
+ * @param mixed $meta Raw get_user_meta() value for the enabled-providers key.
+ * @return bool
+ */
+function force_2fa_meta_indicates_configured( $meta ) {
+	return is_array( $meta ) && ! empty( $meta );
+}
+
+/**
+ * Whether a user has explicitly configured (enabled) at least one 2FA provider.
+ *
+ * Reads Two Factor's stored enabled-providers meta and defers the verdict to the pure
+ * force_2fa_meta_indicates_configured(). Because this plugin appends Email at runtime
+ * WITHOUT persisting it, a user who has only the forced Email floor reads as NOT
+ * configured — which is exactly the signal blocking mode needs to know it must still
+ * send them through setup.
+ *
+ * @param WP_User $user The user to check.
+ * @return bool
+ */
+function force_2fa_user_has_configured_2fa( WP_User $user ) {
+	$meta = get_user_meta( (int) $user->ID, force_2fa_enabled_providers_meta_key(), true );
+	return force_2fa_meta_indicates_configured( $meta );
+}
+
+/**
+ * Pure decision: does this user still need to be sent through 2FA setup?
+ *
+ * True only when blocking mode is on, the dependency is usable, the visitor is a
+ * logged-in, non-exempt user who has not explicitly configured any provider. Split
+ * from the request glue so the whole truth table is unit-tested. This decides WHO
+ * needs setup; force_2fa_request_is_gateable() decides WHICH requests we may redirect.
+ *
+ * @param bool $enabled        Blocking mode on (force_2fa_blocking_mode_enabled()).
+ * @param bool $dependency_met Two Factor usable (force_2fa_dependency_met()).
+ * @param bool $logged_in      Whether there is an authenticated user.
+ * @param bool $exempt         Whether the user is role-exempt.
+ * @param bool $configured     Whether the user already configured 2FA.
+ * @return bool
+ */
+function force_2fa_should_require_setup( $enabled, $dependency_met, $logged_in, $exempt, $configured ) {
+	return (bool) $enabled
+		&& (bool) $dependency_met
+		&& (bool) $logged_in
+		&& ! (bool) $exempt
+		&& ! (bool) $configured;
+}
+
+/**
+ * Pure decision: may THIS request be gated (redirected) by blocking mode?
+ *
+ * Returns false for the paths that must never be redirected, because Two Factor's own
+ * setup flows and non-interactive integrations depend on them:
+ *   - AJAX / REST / cron / XML-RPC / WP-CLI — TOTP QR verification, WebAuthn
+ *     registration and backup-code generation happen over AJAX/REST; cron, XML-RPC
+ *     and WP-CLI are non-interactive and have nowhere to show a setup screen.
+ *   - The 2FA setup screen itself (the profile / user-edit page) — gating it would be
+ *     a dead-end: the user could never reach the UI that clears the gate.
+ * Everything else (ordinary interactive admin and front-end page loads) is gateable.
+ * Split out so the exclusion set is unit-tested independently of the request glue.
+ *
+ * @param bool $is_ajax        wp_doing_ajax().
+ * @param bool $is_cron        wp_doing_cron().
+ * @param bool $is_rest        REST_REQUEST.
+ * @param bool $is_xmlrpc      XMLRPC_REQUEST.
+ * @param bool $is_cli         WP_CLI.
+ * @param bool $is_setup_screen Whether the current screen is where 2FA is configured.
+ * @return bool
+ */
+function force_2fa_request_is_gateable( $is_ajax, $is_cron, $is_rest, $is_xmlrpc, $is_cli, $is_setup_screen ) {
+	if ( $is_ajax || $is_cron || $is_rest || $is_xmlrpc || $is_cli ) {
+		return false;
+	}
+	if ( $is_setup_screen ) {
+		return false;
+	}
+	return true;
+}
+
+/**
+ * Whether the wp_mail_from_name encoder is active.
+ *
+ * Defaults to true; the 'force_2fa_encode_mail_from_name_enabled' filter lets a site
+ * turn the From-name encoding off — e.g. to keep this single-purpose plugin strictly
+ * hands-off about non-2FA mail, or where another layer already encodes headers.
+ * Injectable for unit tests.
+ *
+ * @return bool
+ */
+function force_2fa_mail_from_name_encoding_enabled() {
+	return (bool) apply_filters( 'force_2fa_encode_mail_from_name_enabled', true );
+}
+
+/**
+ * Encode a mail "From" display name for non-ASCII characters (RFC 2047).
+ *
+ * Behind the 'wp_mail_from_name' filter. When the site/blog name (which WordPress uses
+ * as the default From name for 2FA email codes) contains non-ASCII characters, some
+ * strict MTAs (e.g. AWS SES) reject or mangle the raw 8-bit header. Encoding just the
+ * DISPLAY NAME as an RFC 2047 encoded-word is always valid and is transparently decoded
+ * by mail clients.
+ *
+ * Crucially this encodes ONLY the name WordPress passes to this filter — never an
+ * address. WordPress assembles `From: "<name>" <address>` itself, so the address is
+ * untouched (encoded-words are forbidden inside an addr-spec). It no-ops when the
+ * encoder is disabled via force_2fa_mail_from_name_encoding_enabled(); and pure ASCII
+ * names, an empty/non-string value, or a host without the mbstring extension pass
+ * through unchanged (an already-encoded word is plain ASCII, so it is never
+ * double-encoded). The transform is unit-tested directly.
+ *
+ * @param mixed $from_name The From display name WordPress is about to use.
+ * @return mixed Encoded name when it contains non-ASCII (and mbstring is present),
+ *               otherwise the value unchanged.
+ */
+function force_2fa_encode_mail_from_name( $from_name ) {
+	if ( ! force_2fa_mail_from_name_encoding_enabled() ) {
+		return $from_name;
+	}
+
+	if ( ! is_string( $from_name ) || '' === $from_name ) {
+		return $from_name;
+	}
+
+	// Nothing to do for names that are already plain printable ASCII.
+	if ( ! preg_match( '/[^\x20-\x7E]/', $from_name ) ) {
+		return $from_name;
+	}
+
+	// Without mbstring we cannot safely encode; leave the value as-is rather than
+	// risk a broken header. (mbstring is near-universal but not guaranteed.)
+	if ( ! function_exists( 'mb_encode_mimeheader' ) ) {
+		return $from_name;
+	}
+
+	// 'B' (base64), no folding whitespace — a single encoded-word for the phrase.
+	return mb_encode_mimeheader( $from_name, 'UTF-8', 'B', '' );
+}
+
+// The blocking-mode request glue redirects real browser requests and calls
+// wp_get_current_user()/wp_safe_redirect()/exit — WordPress runtime the
+// zero-dependency unit bootstrap does not stub, and only ever reached through the
+// admin_init/template_redirect hooks (never at load). Its behaviour is exercised in a
+// real environment (see docs/TESTING-BLOCKING-MODE.md / the Playground blueprint); the
+// pure decisions it delegates to — force_2fa_should_require_setup(),
+// force_2fa_request_is_gateable(), force_2fa_user_has_configured_2fa() — are unit-tested.
+// @codeCoverageIgnoreStart
+
+/**
+ * Whether the current admin screen is where a user configures 2FA.
+ *
+ * True on the profile / user-edit pages, which host Two Factor's own setup UI and must
+ * never be gated (else blocking mode is a dead-end). Front-end requests are never a
+ * "setup screen", so they always gate through to the redirect.
+ *
+ * @return bool
+ */
+function force_2fa_is_setup_screen() {
+	if ( ! is_admin() ) {
+		return false;
+	}
+	$pagenow = isset( $GLOBALS['pagenow'] ) ? (string) $GLOBALS['pagenow'] : '';
+	return in_array( $pagenow, array( 'profile.php', 'user-edit.php' ), true );
+}
+
+/**
+ * Blocking-mode gate: redirect unconfigured users to their 2FA setup screen.
+ *
+ * Hooked on both admin_init and template_redirect so it covers the admin and the
+ * front-end. It composes the two pure decisions:
+ *   - force_2fa_should_require_setup() — is this user someone who still needs setup?
+ *   - force_2fa_request_is_gateable()  — is this the kind of request we may redirect?
+ * When both are true it sends the user to their profile page (Two Factor's real setup
+ * UI); once they enable a provider there, force_2fa_user_has_configured_2fa() flips to
+ * true and the gate releases. No-ops unless blocking mode is on AND Two Factor is
+ * usable, so it can never lock a site where 2FA cannot be configured.
+ */
+function force_2fa_enforce_setup_gate() {
+	if ( ! force_2fa_blocking_mode_enabled() || ! force_2fa_dependency_met() ) {
+		return;
+	}
+	if ( ! is_user_logged_in() ) {
+		return;
+	}
+
+	// wp_get_current_user() always returns a WP_User; ID 0 means no one is logged in.
+	$user = wp_get_current_user();
+	if ( 0 === (int) $user->ID ) {
+		return;
+	}
+
+	if ( ! force_2fa_should_require_setup(
+		true, // blocking mode: already confirmed above.
+		true, // dependency: already confirmed above.
+		true, // logged in: already confirmed above.
+		force_2fa_user_is_exempt( $user ),
+		force_2fa_user_has_configured_2fa( $user )
+	) ) {
+		return;
+	}
+
+	if ( ! force_2fa_request_is_gateable(
+		wp_doing_ajax(),
+		wp_doing_cron(),
+		defined( 'REST_REQUEST' ) && REST_REQUEST,
+		defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST,
+		defined( 'WP_CLI' ) && WP_CLI,
+		force_2fa_is_setup_screen()
+	) ) {
+		return;
+	}
+
+	$profile_url = get_edit_profile_url( (int) $user->ID );
+	wp_safe_redirect( add_query_arg( 'force_2fa_setup_required', '1', $profile_url ) );
+	exit;
+}
+
+/**
+ * Admin notice on the profile page telling a gated user why they are there.
+ *
+ * Shown only to a user who still needs setup (reusing the same decision as the gate),
+ * on the profile / user-edit screen, pointing them at the Two Factor section they must
+ * complete. Purely informational glue.
+ */
+function force_2fa_setup_required_notice() {
+	if ( ! force_2fa_blocking_mode_enabled() || ! force_2fa_dependency_met() || ! force_2fa_is_setup_screen() ) {
+		return;
+	}
+
+	// wp_get_current_user() always returns a WP_User; ID 0 means no one is logged in.
+	$user = wp_get_current_user();
+	if ( 0 === (int) $user->ID ) {
+		return;
+	}
+
+	if ( ! force_2fa_should_require_setup(
+		true,
+		true,
+		true,
+		force_2fa_user_is_exempt( $user ),
+		force_2fa_user_has_configured_2fa( $user )
+	) ) {
+		return;
+	}
+
+	printf(
+		'<div class="notice notice-warning"><p><strong>%1$s</strong> %2$s</p></div>',
+		esc_html__( 'Two-factor authentication is required.', 'force-email-two-factor' ),
+		esc_html__( 'You must enable at least one two-factor method in the Two-Factor Options below before you can continue using this site.', 'force-email-two-factor' )
+	);
+}
+// @codeCoverageIgnoreEnd
+
 // The dependency-notice renderers below select which notice/label/body to emit and
 // are unit-tested with a stubbed admin surface (see tests/DependencyNoticeTest.php
 // and tests/DependencyNoticeAbsentTest.php). The genuinely untestable spans — the
@@ -1379,6 +1704,19 @@ function force_2fa_register_hooks() {
 	// Bind the API-login app-password check to the account that authenticated (see
 	// force_2fa_filter_api_login_enable): record the user on each app-password auth.
 	add_action( 'application_password_did_authenticate', 'force_2fa_note_app_password_user', 10, 1 );
+
+	// Email header robustness: RFC 2047-encode a non-ASCII From display name so the
+	// 2FA code mail is accepted by strict MTAs (e.g. AWS SES). No-op for ASCII names.
+	add_filter( 'wp_mail_from_name', 'force_2fa_encode_mail_from_name' );
+
+	// Optional blocking mode: gate interactive requests from users who have not yet
+	// configured 2FA, redirecting them to their profile's setup UI. No-ops entirely
+	// unless FORCE_2FA_BLOCKING_MODE (or its filter) is on. Registered on both the
+	// admin and front-end entry points; the callback excludes AJAX/REST/cron/CLI and
+	// the setup screen itself (see force_2fa_request_is_gateable).
+	add_action( 'admin_init', 'force_2fa_enforce_setup_gate' );
+	add_action( 'template_redirect', 'force_2fa_enforce_setup_gate' );
+	add_action( 'admin_notices', 'force_2fa_setup_required_notice' );
 
 	// Soft-dependency UX: nag + one-click installer when Two Factor is absent.
 	// Per-site notice (single-site actionable / multisite heads-up) and the

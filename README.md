@@ -149,6 +149,56 @@ Before enabling enforcement on a production site:
 
 ## Configuration
 
+### Optional: blocking mode (require setup before access)
+
+By default this plugin uses a **soft floor**: it appends the Email provider so the
+login challenge fires for everyone, but a user who has never set up 2FA is not
+otherwise obstructed. **Blocking mode** additionally requires users to *configure*
+a factor before they can use the site.
+
+Default is **off**. Enable it with a constant in `wp-config.php`:
+
+```php
+const FORCE_2FA_BLOCKING_MODE = true;
+```
+
+Or, without editing the plugin file, via filter (e.g. only in production):
+
+```php
+add_filter( 'force_2fa_blocking_mode_enabled', function () {
+	return 'production' === wp_get_environment_type();
+} );
+```
+
+**How it works.** A logged-in, non-exempt user who has not explicitly enabled any
+provider in their Two Factor profile is redirected to their **profile page** — where
+Two Factor's own setup UI lives — on any interactive page load. The moment they
+enable a provider there (TOTP, WebAuthn/passkey, backup codes, or Email), the gate
+releases and they proceed normally.
+
+It is deliberately built to be **impossible to dead-end**:
+
+- "Configured" is read from Two Factor's own stored setting
+  (`_two_factor_enabled_providers`), so configuration genuinely persists and clears
+  the gate. The runtime Email floor this plugin appends is *not* counted as
+  configuration — otherwise nobody would ever be prompted.
+- The **profile / user-edit screens are never gated**, and neither are
+  **AJAX, REST, cron, XML-RPC, or WP-CLI** — those are exactly the paths Two Factor's
+  setup flows (TOTP QR verification, WebAuthn registration, backup-code generation)
+  run on. Only ordinary interactive page loads are redirected.
+- It **no-ops entirely when Two Factor is inactive** and respects **excluded roles**
+  and the **`FORCE_2FA_DISABLE`** kill switch, so it can never lock a site where 2FA
+  cannot be configured.
+
+> [!WARNING]
+> Blocking mode adds real friction and, like all Email-2FA enforcement, depends on
+> working outbound mail. Verify mail delivery, keep a known-good admin session (or the
+> `FORCE_2FA_DISABLE` kill switch) on hand, and test with a non-admin user on staging
+> before enabling on production.
+
+See [`docs/TESTING-BLOCKING-MODE.md`](docs/TESTING-BLOCKING-MODE.md) for a manual test
+checklist and the `bin/blocking-mode-e2e.sh` end-to-end check.
+
 ### Excluding roles from forced 2FA
 
 Enforcement applies to **all** users by default. To exempt specific roles, list
@@ -297,6 +347,25 @@ Nothing this plugin creates touches an SSO/SAML/OIDC/OAuth/LDAP integration's co
   Email provider registered in `Two_Factor_Core::get_providers()` — means the
   filter no-ops safely (never stripping an existing factor) if Two Factor is
   inactive, and does not append a provider Two Factor can't resolve.
+
+- **Blocking mode (optional):** off by default. When on, `force_2fa_enforce_setup_gate()`
+  (hooked on both `admin_init` and `template_redirect`) redirects a logged-in,
+  non-exempt user who has not configured 2FA to their profile page. It composes two
+  pure, unit-tested decisions: `force_2fa_should_require_setup()` (who still needs
+  setup — keyed off Two Factor's stored `_two_factor_enabled_providers` meta via
+  `force_2fa_user_has_configured_2fa()`, so the runtime Email floor never counts) and
+  `force_2fa_request_is_gateable()` (which requests may be redirected — never AJAX,
+  REST, cron, XML-RPC, WP-CLI, or the profile/user-edit setup screen). It no-ops unless
+  Two Factor is usable, so it cannot lock a site where 2FA can't be configured.
+
+- **Email header robustness:** filters `wp_mail_from_name` through
+  `force_2fa_encode_mail_from_name()`, which RFC 2047-encodes the From **display name**
+  (never the address) when it contains non-ASCII characters — so a blog name with
+  accented characters doesn't produce an 8-bit header that strict MTAs (e.g. AWS SES)
+  reject. Plain-ASCII names, already-encoded words, and hosts without `mbstring` pass
+  through unchanged. It applies to all outbound mail (there is no reliable way to scope
+  it to 2FA mail from this filter, and encoding a display name is lossless); turn it off
+  with the `force_2fa_encode_mail_from_name_enabled` filter (`__return_false`).
 
 - **API logins:** filters `two_factor_user_api_login_enable`. Two Factor's default
   value for this filter is `did_action( 'application_password_did_authenticate' )`,
