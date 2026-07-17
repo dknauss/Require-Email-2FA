@@ -1,15 +1,14 @@
-# Testing blocking mode & the mail From-name encoder
+# Testing blocking mode
 
-This covers the two behaviours added in 1.11.0: the optional **blocking mode** and
-the **`wp_mail_from_name`** RFC 2047 encoder. Both are **off/transparent by default**,
+This covers the optional **blocking mode** added in 1.11.0. It is **off by default**,
 so the first thing to confirm is that an existing install is unchanged until you opt in.
 
 ## What is verified where
 
 | Behaviour | Covered by |
 | --- | --- |
-| Pure decisions (`force_2fa_should_require_setup`, `force_2fa_request_is_gateable`, `force_2fa_meta_indicates_configured`, `force_2fa_user_has_configured_2fa`, `force_2fa_encode_mail_from_name`), hook wiring | PHPUnit (`tests/BlockingModeTest.php`, `tests/MailFromNameTest.php`) — `composer test` |
-| Real integration: Two Factor's stored-providers meta key, gate release after a provider is enabled, non-ASCII From-name encoding | `bin/blocking-mode-e2e.sh` (real WordPress + real Two Factor, SQLite) |
+| Pure decisions (`force_2fa_should_require_setup`, `force_2fa_request_is_gateable`, `force_2fa_meta_indicates_configured`, `force_2fa_user_has_configured_2fa`, `force_2fa_screen_is_own_setup`), hook wiring | PHPUnit (`tests/BlockingModeTest.php`) — `composer test` |
+| Real integration: Two Factor's stored-providers meta key, gate release after a provider is enabled | `bin/blocking-mode-e2e.sh` (real WordPress + real Two Factor, SQLite) |
 | The interactive redirect UX (browser is actually bounced to the profile page and released after setup) | Manual / Playground — see below |
 
 The redirect *glue* (`force_2fa_enforce_setup_gate`) calls `wp_safe_redirect()`/`exit`
@@ -25,9 +24,8 @@ bash bin/blocking-mode-e2e.sh  # disposable real WP + Two Factor; asserts integr
 `bin/blocking-mode-e2e.sh` (SQLite, no MySQL) asserts, against the **real** Two Factor
 plugin: the meta key the plugin reads matches Two Factor's own constant; an
 unconfigured user requires setup and is gateable on page loads but *not* on the setup
-screen or AJAX; enabling a provider flips the user to "configured" and releases the
-gate; and a non-ASCII blog name is RFC 2047-encoded on `wp_mail_from_name` while an
-ASCII one is untouched.
+screen or AJAX; and enabling a provider flips the user to "configured" and releases the
+gate.
 
 ## Interactive: WordPress Playground
 
@@ -61,15 +59,13 @@ https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.co
 - [ ] **Kill switch.** `define( 'FORCE_2FA_DISABLE', true )` disables everything,
       including blocking mode.
 - [ ] **Non-interactive paths.** REST/XML-RPC/cron/WP-CLI are not redirected.
-- [ ] **Mail From-name.** With a non-ASCII blog name, the From name on the 2FA email is
-      an `=?UTF-8?B?…?=` encoded-word (check the raw message); an ASCII blog name is
-      sent verbatim.
+- [ ] **Editing other users stays gated.** An unconfigured user with `edit_users` who
+      opens `user-edit.php?user_id=<someone-else>` is still redirected to their own
+      profile; only their own `profile.php` (or a self-targeted `user-edit.php`) is exempt.
 
 ## Debugging
 
 - `wp eval 'var_dump( force_2fa_blocking_mode_enabled() );'` — is blocking on?
 - `wp user meta get <id> _two_factor_enabled_providers` — empty ⇒ "unconfigured"
   (redirected); a non-empty array ⇒ "configured" (released).
-- `wp eval 'var_dump( apply_filters( "wp_mail_from_name", get_bloginfo( "name" ) ) );'`
-  — see the encoded From name.
 - Enable `WP_DEBUG_LOG` and watch `wp-content/debug.log` during a login.

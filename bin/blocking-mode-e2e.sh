@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Real-WordPress end-to-end check for blocking mode + the mail From-name encoder.
+# Real-WordPress end-to-end check for blocking mode.
 #
 # Uses the SQLite drop-in so it needs no MySQL server (same pattern as
 # multisite-e2e.sh / update-e2e.sh). Installs the REAL Two Factor plugin so the
@@ -13,7 +13,6 @@
 #   - the blocking gate's composed decision (force_2fa_should_require_setup +
 #     force_2fa_request_is_gateable) evaluates correctly for a real unconfigured
 #     user and releases once they configure.
-#   - the wp_mail_from_name encoder RFC 2047-encodes a non-ASCII blog name.
 #
 # Usage: bin/blocking-mode-e2e.sh
 set -euo pipefail
@@ -95,17 +94,6 @@ if ( ! force_2fa_user_has_configured_2fa( $u ) ) { fwrite( STDERR, "FAIL: alice 
 $need = force_2fa_should_require_setup( force_2fa_blocking_mode_enabled(), force_2fa_dependency_met(), true, force_2fa_user_is_exempt( $u ), force_2fa_user_has_configured_2fa( $u ) );
 if ( $need ) { fwrite( STDERR, "FAIL: configured alice should NOT require setup\n" ); exit( 1 ); }
 echo "    OK gate releases once a provider is actually enabled\n";
-'
-
-echo "==> Assert: mail From-name encoder RFC 2047-encodes a non-ASCII blog name"
-wp option update blogname "Zürich Café" >/dev/null
-wp eval '
-$name = apply_filters( "wp_mail_from_name", "Zürich Café" );
-if ( strpos( $name, "=?UTF-8?B?" ) !== 0 ) { fwrite( STDERR, "FAIL: non-ASCII From-name not encoded: $name\n" ); exit( 1 ); }
-if ( preg_match( "/[^\x20-\x7E]/", $name ) ) { fwrite( STDERR, "FAIL: encoded header still has raw non-ASCII bytes\n" ); exit( 1 ); }
-$ascii = apply_filters( "wp_mail_from_name", "Acme Blog" );
-if ( $ascii !== "Acme Blog" ) { fwrite( STDERR, "FAIL: ASCII From-name should pass through unchanged: $ascii\n" ); exit( 1 ); }
-echo "    OK non-ASCII encoded, ASCII untouched\n";
 '
 
 echo "==> Blocking-mode E2E passed."

@@ -250,12 +250,6 @@ from this API-login gate.
   XML-RPC/WP-CLI paths that 2FA setup depends on, respects excluded roles and the
   `FORCE_2FA_DISABLE` kill switch, and no-ops when Two Factor is inactive — so it
   cannot dead-end or lock a site. Existing installs are unaffected unless they opt in.
-* Email header robustness: the From **display name** for outgoing mail is now RFC
-  2047-encoded when it contains non-ASCII characters (e.g. an accented blog name),
-  via the `wp_mail_from_name` filter, so strict mail services such as AWS SES accept
-  it. Only the display name is encoded — never the address — and plain-ASCII names,
-  already-encoded values, and hosts without mbstring are untouched. Turn it off with
-  the `force_2fa_encode_mail_from_name_enabled` filter.
 
 = 1.10.6 =
 * Docs: added a "Security model" section stating plainly what the plugin enforces

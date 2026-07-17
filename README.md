@@ -370,15 +370,6 @@ Nothing this plugin creates touches an SSO/SAML/OIDC/OAuth/LDAP integration's co
   REST, cron, XML-RPC, WP-CLI, or the profile/user-edit setup screen). It no-ops unless
   Two Factor is usable, so it cannot lock a site where 2FA can't be configured.
 
-- **Email header robustness:** filters `wp_mail_from_name` through
-  `force_2fa_encode_mail_from_name()`, which RFC 2047-encodes the From **display name**
-  (never the address) when it contains non-ASCII characters — so a blog name with
-  accented characters doesn't produce an 8-bit header that strict MTAs (e.g. AWS SES)
-  reject. Plain-ASCII names, already-encoded words, and hosts without `mbstring` pass
-  through unchanged. It applies to all outbound mail (there is no reliable way to scope
-  it to 2FA mail from this filter, and encoding a display name is lossless); turn it off
-  with the `force_2fa_encode_mail_from_name_enabled` filter (`__return_false`).
-
 - **API logins:** filters `two_factor_user_api_login_enable`. Two Factor's default
   value for this filter is `did_action( 'application_password_did_authenticate' )`,
   i.e. it already allows an API login to skip 2FA only when an Application Password

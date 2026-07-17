@@ -161,18 +161,4 @@ final class BlockingModeTest extends TestCase {
 			$GLOBALS['__force2fa_added_actions']
 		);
 	}
-
-	public function test_register_hooks_wires_the_mail_from_name_encoder(): void {
-		$GLOBALS['__force2fa_added_filters'] = array();
-		force_2fa_register_hooks();
-
-		$tags = array_map(
-			static function ( $registration ) {
-				return $registration[0];
-			},
-			$GLOBALS['__force2fa_added_filters']
-		);
-
-		$this->assertContains( 'wp_mail_from_name', $tags );
-	}
 }

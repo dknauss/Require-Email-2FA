@@ -825,65 +825,6 @@ function force_2fa_request_is_gateable( $is_ajax, $is_cron, $is_rest, $is_xmlrpc
 }
 
 /**
- * Whether the wp_mail_from_name encoder is active.
- *
- * Defaults to true; the 'force_2fa_encode_mail_from_name_enabled' filter lets a site
- * turn the From-name encoding off — e.g. to keep this single-purpose plugin strictly
- * hands-off about non-2FA mail, or where another layer already encodes headers.
- * Injectable for unit tests.
- *
- * @return bool
- */
-function force_2fa_mail_from_name_encoding_enabled() {
-	return (bool) apply_filters( 'force_2fa_encode_mail_from_name_enabled', true );
-}
-
-/**
- * Encode a mail "From" display name for non-ASCII characters (RFC 2047).
- *
- * Behind the 'wp_mail_from_name' filter. When the site/blog name (which WordPress uses
- * as the default From name for 2FA email codes) contains non-ASCII characters, some
- * strict MTAs (e.g. AWS SES) reject or mangle the raw 8-bit header. Encoding just the
- * DISPLAY NAME as an RFC 2047 encoded-word is always valid and is transparently decoded
- * by mail clients.
- *
- * Crucially this encodes ONLY the name WordPress passes to this filter — never an
- * address. WordPress assembles `From: "<name>" <address>` itself, so the address is
- * untouched (encoded-words are forbidden inside an addr-spec). It no-ops when the
- * encoder is disabled via force_2fa_mail_from_name_encoding_enabled(); and pure ASCII
- * names, an empty/non-string value, or a host without the mbstring extension pass
- * through unchanged (an already-encoded word is plain ASCII, so it is never
- * double-encoded). The transform is unit-tested directly.
- *
- * @param mixed $from_name The From display name WordPress is about to use.
- * @return mixed Encoded name when it contains non-ASCII (and mbstring is present),
- *               otherwise the value unchanged.
- */
-function force_2fa_encode_mail_from_name( $from_name ) {
-	if ( ! force_2fa_mail_from_name_encoding_enabled() ) {
-		return $from_name;
-	}
-
-	if ( ! is_string( $from_name ) || '' === $from_name ) {
-		return $from_name;
-	}
-
-	// Nothing to do for names that are already plain printable ASCII.
-	if ( ! preg_match( '/[^\x20-\x7E]/', $from_name ) ) {
-		return $from_name;
-	}
-
-	// Without mbstring we cannot safely encode; leave the value as-is rather than
-	// risk a broken header. (mbstring is near-universal but not guaranteed.)
-	if ( ! function_exists( 'mb_encode_mimeheader' ) ) {
-		return $from_name;
-	}
-
-	// 'B' (base64), no folding whitespace — a single encoded-word for the phrase.
-	return mb_encode_mimeheader( $from_name, 'UTF-8', 'B', '' );
-}
-
-/**
  * Pure decision: is this admin page the CURRENT user's own 2FA setup screen?
  *
  * The personal profile (profile.php) always is. user-edit.php is the admin screen for
@@ -1731,10 +1672,6 @@ function force_2fa_register_hooks() {
 	// Bind the API-login app-password check to the account that authenticated (see
 	// force_2fa_filter_api_login_enable): record the user on each app-password auth.
 	add_action( 'application_password_did_authenticate', 'force_2fa_note_app_password_user', 10, 1 );
-
-	// Email header robustness: RFC 2047-encode a non-ASCII From display name so the
-	// 2FA code mail is accepted by strict MTAs (e.g. AWS SES). No-op for ASCII names.
-	add_filter( 'wp_mail_from_name', 'force_2fa_encode_mail_from_name' );
 
 	// Optional blocking mode: gate interactive requests from users who have not yet
 	// configured 2FA, redirecting them to their profile's setup UI. No-ops entirely
