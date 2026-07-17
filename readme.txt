@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.10.6
+Stable tag: 1.11.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -239,6 +239,17 @@ cover REST is on the roadmap (issue #41). Excluding a role also removes those ac
 from this API-login gate.
 
 == Changelog ==
+
+= 1.11.0 =
+* New optional **blocking mode** (`FORCE_2FA_BLOCKING_MODE`, or the
+  `force_2fa_blocking_mode_enabled` filter; **off by default**). When enabled, a
+  logged-in, non-exempt user who has not configured any two-factor method is
+  redirected to their profile page — where the Two Factor setup UI lives — until they
+  enable one. It keys "configured" off Two Factor's own stored providers so setup
+  genuinely clears the gate, never gates the profile/setup screen or AJAX/REST/cron/
+  XML-RPC/WP-CLI paths that 2FA setup depends on, respects excluded roles and the
+  `FORCE_2FA_DISABLE` kill switch, and no-ops when Two Factor is inactive — so it
+  cannot dead-end or lock a site. Existing installs are unaffected unless they opt in.
 
 = 1.10.6 =
 * Docs: added a "Security model" section stating plainly what the plugin enforces

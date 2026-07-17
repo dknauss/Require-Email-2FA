@@ -1,0 +1,43 @@
+{
+    "$schema": "https://playground.wordpress.net/blueprint-schema.json",
+    "login": true,
+    "landingPage": "/wp-admin/",
+    "steps": [
+        {
+            "step": "installPlugin",
+            "pluginData": {
+                "resource": "wordpress.org/plugins",
+                "slug": "two-factor"
+            },
+            "options": {
+                "activate": true
+            }
+        },
+        {
+            "step": "mkdir",
+            "path": "/wordpress/wp-content/plugins/force-email-two-factor"
+        },
+        {
+            "step": "writeFile",
+            "path": "/wordpress/wp-content/plugins/force-email-two-factor/force-email-two-factor.php",
+            "data": {
+                "resource": "url",
+                "url": "https://raw.githubusercontent.com/dknauss/Require-Email-2FA/main/force-email-two-factor.php"
+            }
+        },
+        {
+            "step": "activatePlugin",
+            "pluginPath": "force-email-two-factor/force-email-two-factor.php"
+        },
+        {
+            "step": "defineWpConfigConsts",
+            "consts": {
+                "FORCE_2FA_BLOCKING_MODE": true
+            }
+        },
+        {
+            "step": "wp-cli",
+            "command": "wp user create alice alice@example.com --role=editor --user_pass=password123 --display_name='Alice (no 2FA yet)'"
+        }
+    ]
+}
