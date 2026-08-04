@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, security, authentication, login
 Requires at least: 6.8
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.13.1
+Stable tag: 1.13.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -135,7 +135,7 @@ plugin's rate limiting and failed-attempt protections.
 = Who is required to use 2FA, and how do I change it? =
 
 By default, every user is. Right after you activate the plugin, a one-time admin notice
-lets you pick the scope with a radio — All users / Editors and up / Administrators only
+lets you pick the scope with a radio — All users / Contributors and up / Administrators only
 (administrators pre-selected) — and one click saves it; until you choose, the secure
 default (all users) applies. To change the choice later, deactivate and reactivate the
 plugin.
@@ -331,6 +331,14 @@ account independently of the 2FA scope, so narrowing the scope (or excluding a r
 never opens XML-RPC to accounts left out of the interactive challenge.
 
 == Changelog ==
+
+= 1.13.2 =
+* Fixed: the first-run enforcement-scope prompt offered the `edit_posts` option under the
+  label "Editors and up", but that capability is held by contributors and authors too, so
+  choosing it enforced the emailed floor on everyone who can write posts — broader than
+  the label promised. The option now reads "Contributors and up (anyone who can write
+  posts)", matching what it has always done. Wording only: the stored capability is
+  unchanged, so enforcement on existing installs is unaffected and no re-prompt is needed.
 
 = 1.13.1 =
 * New: users whose 2FA is handled by Wordfence Login Security are exempt from the

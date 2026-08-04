@@ -285,7 +285,7 @@ administrators. (The [XML-RPC API-login hardening](#security-model) is enforced 
 accounts *regardless* of this scope — narrowing it never opens XML-RPC.)
 
 > **No `wp-config.php` access? Pick the scope right after activating.** A one-time
-> admin notice appears on first run with a radio — **All users / Editors and up /
+> admin notice appears on first run with a radio — **All users / Contributors and up /
 > Administrators only** (administrators pre-selected) — and one click saves it. Until
 > you choose, the secure default (all users) applies. To change it later, deactivate and
 > reactivate the plugin. Defining the constant below suppresses the prompt (code wins).

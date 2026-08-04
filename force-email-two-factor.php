@@ -6,7 +6,7 @@
  * Description:      Requires the Two Factor plugin and makes emailed 2FA a required login factor for all users (optionally scoped to a capability, e.g. administrators).
  * Author:           Pixel
  * Author URI:       https://wearepixel.ca
- * Version:          1.13.1
+ * Version:          1.13.2
  * Requires at least: 6.8
  * Requires PHP:     7.2
  * License:          GPL-2.0-or-later
@@ -112,7 +112,7 @@ if ( defined( 'FORCE_2FA_DISABLE' ) && FORCE_2FA_DISABLE ) {
 if ( defined( 'FORCE_2FA_LOADED' ) ) {
 	return;
 }
-define( 'FORCE_2FA_LOADED', '1.13.1' );
+define( 'FORCE_2FA_LOADED', '1.13.2' );
 // @codeCoverageIgnoreEnd
 
 /**
@@ -467,7 +467,7 @@ const FORCE_2FA_SCOPE_OPTION = 'force_2fa_enforced_capability';
 function force_2fa_scope_choices() {
 	return array(
 		''               => __( 'All users (recommended for the strongest coverage)', 'force-email-two-factor' ),
-		'edit_posts'     => __( 'Editors and up', 'force-email-two-factor' ),
+		'edit_posts'     => __( 'Contributors and up (anyone who can write posts)', 'force-email-two-factor' ),
 		'manage_options' => __( 'Administrators only', 'force-email-two-factor' ),
 	);
 }
@@ -2394,7 +2394,7 @@ function force_2fa_register_hooks() {
 	add_action( 'network_admin_notices', 'force_2fa_network_dependency_notice' );
 	add_action( 'admin_post_force_2fa_install_two_factor', 'force_2fa_handle_install_two_factor' );
 
-	// First-run enforcement-scope prompt: a one-time choice (all users / editors+ /
+	// First-run enforcement-scope prompt: a one-time choice (all users / contributors+ /
 	// admins-only) folded into the admin notices, not a standing settings page. Shows
 	// until a choice is stored or FORCE_2FA_ENFORCED_CAPABILITY is defined in code.
 	add_action( 'admin_notices', 'force_2fa_scope_notice' );
