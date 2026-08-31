@@ -165,6 +165,9 @@ cat > "$WP/wp-content/mu-plugins/10-allowlist.php" <<'PHP'
 <?php
 // E2E only: allowlist the 'svc' service account by login.
 add_filter( 'force_2fa_api_login_allowlist', function () { return array( 'svc' ); } );
+// E2E only: exclude the subscriber role, so the 'excluded' account exercises the
+// exemption path. The other two accounts are editors, so this does not touch them.
+add_filter( 'force_2fa_excluded_roles', function () { return array( 'subscriber' ); } );
 PHP
 wp plugin activate force-email-two-factor
 
