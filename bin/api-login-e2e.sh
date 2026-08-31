@@ -21,14 +21,17 @@
 # Uses the SQLite drop-in and the PHP built-in server. Two Factor is installed from
 # wordpress.org (unpinned), as in the Playground blueprint and the update E2E.
 #
-# Asserts, with two editor users that differ ONLY in allowlist membership:
+# Asserts, with two editor users that differ ONLY in allowlist membership, plus an
+# excluded subscriber with its own configured provider:
 #   - control (our plugin inactive): a non-allowlisted user's app-password XML-RPC
 #     login succeeds, so the later denial is attributable to THIS plugin, and
 #   - allowlisted account + Application Password  -> allowed, and
 #   - non-allowlisted account + Application Password -> denied (real Two Factor
 #     blocks it), and
 #   - allowlisted account + REAL password -> denied (proves condition (b): an
-#     Application Password, not merely allowlist membership, is required).
+#     Application Password, not merely allowlist membership, is required), and
+#   - excluded account + configured provider -> allowed because exclusion opts it
+#     out of this plugin's API-login gate.
 #
 # Usage: bin/api-login-e2e.sh
 # Optional env:
@@ -84,10 +87,12 @@ echo "==> Create two editor users differing only in allowlist membership"
 SVC_REAL_PW="svc-real-pw"
 wp user create svc   svc@example.com   --role=editor --user_pass="$SVC_REAL_PW" >/dev/null
 wp user create other other@example.com --role=editor --user_pass=other-real-pw   >/dev/null
+wp user create excluded excluded@example.com --role=subscriber --user_pass=excluded-real-pw >/dev/null
 
 # Mint an Application Password for each (the plaintext is returned once, with spaces).
 SVC_APP="$(wp user application-password create svc   e2e --porcelain)"
 OTHER_APP="$(wp user application-password create other e2e --porcelain)"
+EXCLUDED_APP="$(wp user application-password create excluded e2e --porcelain)"
 
 # POST an authenticated wp.getUsersBlogs XML-RPC call as "<user>" / "<password>" and
 # echo the raw response body. Success returns a struct containing <name>isAdmin</name>;
@@ -160,8 +165,18 @@ cat > "$WP/wp-content/mu-plugins/10-allowlist.php" <<'PHP'
 <?php
 // E2E only: allowlist the 'svc' service account by login.
 add_filter( 'force_2fa_api_login_allowlist', function () { return array( 'svc' ); } );
+// E2E only: exclude the subscriber role, so the 'excluded' account exercises the
+// exemption path. The other two accounts are editors, so this does not touch them.
+add_filter( 'force_2fa_excluded_roles', function () { return array( 'subscriber' ); } );
 PHP
 wp plugin activate force-email-two-factor
+
+# Give the excluded account a real provider so Two Factor reaches the API-login
+# filter; without a provider, Two Factor correctly never applies an API gate.
+wp eval '
+$user = get_user_by( "login", "excluded" );
+update_user_meta( $user->ID, "_two_factor_enabled_providers", array( "Two_Factor_Totp" ) );
+'
 
 # Sanity: the dependency is met (real Two Factor registers the Email provider) and
 # both users are now 2FA-enforced, so the API gate is actually in play for both.
@@ -184,5 +199,9 @@ echo "    denied, as expected (real Two Factor blocks the API login our filter d
 echo "==> Allowlisted account + REAL password must be DENIED (Application Password required)"
 assert_denied "allowlisted + real password" "$(xmlrpc_get_users_blogs svc "$SVC_REAL_PW")"
 echo "    denied, as expected (condition (b): a real-password API login never bypasses)"
+
+echo "==> Excluded account with its own provider must bypass this plugin's API gate"
+assert_allowed "excluded + app password" "$(xmlrpc_get_users_blogs excluded "$EXCLUDED_APP")"
+echo "    allowed, as expected (role exclusion opts the account out of this plugin's API policy)"
 
 echo "==> API-login (XML-RPC) E2E passed."

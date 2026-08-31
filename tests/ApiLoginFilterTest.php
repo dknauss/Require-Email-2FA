@@ -42,6 +42,16 @@ final class ApiLoginFilterTest extends TestCase {
 		$this->assertFalse( force_2fa_filter_api_login_enable( true, $user ) );
 	}
 
+	public function test_exempt_user_bypasses_the_api_gate(): void {
+		// Exclusion means "do not force 2FA," including this plugin's API-login gate.
+		// This remains important for an excluded account that has configured its own
+		// provider, because Two Factor will then reach this filter for that account.
+		$this->excludeRoles( array( 'subscriber' ) );
+		$user = $this->user( 4, 'subuser', array( 'subscriber' ) );
+		$this->appPasswordUsed( false );
+		$this->assertTrue( force_2fa_filter_api_login_enable( false, $user ) );
+	}
+
 	public function test_resolves_user_from_id(): void {
 		$this->allowlist( array( 5 ) );
 		$this->user( 5, 'svc', array( 'author' ) );

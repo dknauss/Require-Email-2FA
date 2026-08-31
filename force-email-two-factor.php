@@ -567,9 +567,10 @@ function force_2fa_filter_enabled_providers( $enabled_providers, $user_id ) {
  * (REST-only integrations — headless frontends, CI/CD hitting REST endpoints,
  * Zapier/Make/n8n — are NOT governed by this allowlist; see SCOPE below.)
  *
- * The resulting policy is the INTERSECTION of two conditions (see filter below):
- *   (a) the account is on this allowlist, AND
- *   (b) THIS request authenticated with an Application Password.
+ * The resulting policy is one of two paths (see filter below):
+ *   - an explicitly exempt account is allowed through unchanged; or
+ *   - a non-exempt account must satisfy BOTH (a) allowlist membership and (b) an
+ *     Application Password authenticating that same account in THIS request.
  * So an allowlisted account that tries its real login password over the API is
  * still denied, and a non-allowlisted account is denied even with an app password.
  *
@@ -696,7 +697,8 @@ function force_2fa_app_password_user_id() {
  *
  * @param bool             $enable Ignored; the decision is recomputed here.
  * @param WP_User|int|null $user   The authenticating user (object or ID).
- * @return bool True only for an allowlisted account that used an Application Password.
+ * @return bool True for an exempt account, or for an allowlisted account that used
+ *              an Application Password.
  */
 function force_2fa_filter_api_login_enable( $enable, $user ) {
 	unset( $enable ); // We recompute the decision from scratch below.
@@ -708,6 +710,15 @@ function force_2fa_filter_api_login_enable( $enable, $user ) {
 
 	if ( ! $user || empty( $user->user_login ) ) {
 		return false; // Unknown user → deny the API bypass.
+	}
+
+	// Exemptions mean "do not force 2FA," including this plugin's API-login gate. This is
+	// deliberately checked before the Application Password requirement: an operator who
+	// excludes a role or account has opted that account out of this plugin's API policy as
+	// well. If the account has no enabled provider, Two Factor never reaches this filter;
+	// if it has its own provider, this lets the exclusion remain coherent.
+	if ( force_2fa_user_is_exempt( $user ) ) {
+		return true;
 	}
 
 	// (b) THIS user must have authenticated via an Application Password this request.
