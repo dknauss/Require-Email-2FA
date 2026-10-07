@@ -1,20 +1,22 @@
 === Require Email 2FA ===
 Contributors: dpknauss
 Tags: two-factor, 2fa, security, authentication, login
-Requires at least: 6.5
+Requires at least: 6.8
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.11.0
+Stable tag: 1.14.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Requires the Two Factor plugin and makes emailed 2FA the default, required login factor for all users, with per-role exclusions.
+Requires the Two Factor plugin and makes emailed 2FA a required login factor for all users, with optional capability-scoping (e.g. admins-only) and per-role exclusions.
 
 == Description ==
 
 Builds on the [Two Factor](https://wordpress.org/plugins/two-factor/) plugin and
 makes its emailed 2FA codes a mandatory baseline for every user — so the login
-challenge appears even for accounts that never set up two-factor. Two Factor must
+challenge appears even for accounts that never set up two-factor. Enforcement can
+optionally be narrowed to a capability (e.g. admins-only) or scoped with per-role
+exclusions. Two Factor must
 be active for any enforcement to happen; if it is not, this plugin activates but
 stays a no-op and shows an admin notice with a one-click installer. On multisite
 it is network-only: Network Activate it (per-site activation is blocked).
@@ -27,7 +29,9 @@ It does two things:
    Enforcement is appended rather than replacing the user's provider list, so
    users who set up a stronger factor (TOTP, hardware key / WebAuthn) keep it as
    their primary method, and backup codes remain available as a recovery path.
-   Enforcement can be scoped with per-role exclusions.
+   Enforcement can optionally be narrowed to a capability via
+   `FORCE_2FA_ENFORCED_CAPABILITY` (e.g. `manage_options` for admins-only) and
+   further scoped with per-role exclusions.
 
 2. **Restricts XML-RPC logins.** Non-interactive logins bypass the interactive
    2FA screen. This plugin permits such a login to skip 2FA only when both the
@@ -55,6 +59,8 @@ It does two things:
 
 * Mandatory email two-factor as a universal floor, with no per-user setup.
 * Stronger user-configured factors (TOTP, WebAuthn) and backup codes preserved.
+* Optional capability-scoping to narrow enforcement (e.g. admins-only) via
+  `FORCE_2FA_ENFORCED_CAPABILITY`; default is all users.
 * Per-role exclusions, defaulting to "all users" (`FORCE_2FA_EXCLUDED_ROLES`).
 * A `force_2fa_user_is_exempt` filter for one-off, per-user exemptions.
 * Service-account allowlist for API logins, gated on Application Passwords.
@@ -108,9 +114,10 @@ Yes — Two Factor (`two-factor`) provides the Email provider this plugin makes
 mandatory, so nothing is enforced without it. As of 1.8.0 the dependency is no
 longer a hard activation gate. This plugin activates on its own, no-ops while Two
 Factor is inactive, and shows an admin notice with a one-click install/activate
-button. The `Requires at least: 6.5` floor is now just a conservative baseline,
-not a technical requirement of the (removed) `Requires Plugins` header — you can
-lower it if you need to run on older WordPress.
+button. The `Requires at least: 6.8` floor tracks Two Factor's own requirement:
+the current Two Factor release requires WordPress 6.8+, so on older WordPress the
+one-click installer cannot install it and nothing can be enforced. Run WordPress
+6.8 or newer (or install a Two Factor build that supports your WordPress version).
 
 = What if email delivery breaks and users are locked out? =
 
@@ -125,14 +132,85 @@ rejected like any invalid code; use **Resend Code** or restart login to generate
 a fresh email code. Repeated invalid attempts are handled by the Two Factor
 plugin's rate limiting and failed-attempt protections.
 
+= Who is required to use 2FA, and how do I change it? =
+
+By default, every user is. Right after you activate the plugin, a one-time admin notice
+lets you pick the scope with a radio — All users / Contributors and up / Administrators only
+(administrators pre-selected) — and one click saves it; until you choose, the secure
+default (all users) applies. To change the choice later, deactivate and reactivate the
+plugin.
+
+For a code-managed setup, define `FORCE_2FA_ENFORCED_CAPABILITY` in wp-config.php with
+the capability a user must hold to be in scope (this overrides the first-run choice and
+hides the prompt) — for administrators only:
+
+`
+define( 'FORCE_2FA_ENFORCED_CAPABILITY', 'manage_options' );
+`
+
+(or `add_filter( 'force_2fa_enforced_capability', function () { return 'manage_options'; } );`).
+Use a lower capability such as `edit_posts` to cover contributors and up. Leaving it
+undefined (or `''`) keeps the default of all users. On multisite the check is
+network-wide: a user is in scope if they are a super admin or hold the capability on
+any site they belong to (WordPress logins are network-wide, so a per-site check would
+let an admin of one subsite log in through another and skip enforcement).
+
+Note: narrowing the scope does NOT weaken the XML-RPC allowlist. It is enforced
+independently of the 2FA scope — every XML-RPC login is held to the allowlist +
+Application-Password policy, in scope or not — so scoping interactive 2FA to admins
+never opens XML-RPC to everyone else. The one exception is an account you explicitly
+exclude with `FORCE_2FA_EXCLUDED_ROLES` or the `force_2fa_user_is_exempt` filter: an
+exclusion opts that account out of this plugin's XML-RPC policy too. (This governs XML-RPC, not REST; REST
+Application-Password logins bypass the authenticate chain.) Per-role exclusions still
+apply on top for the interactive challenge.
+
+= Where do these settings go — wp-config.php or a filter? =
+
+Every `FORCE_2FA_*` constant can go in **wp-config.php** — they are all read with
+`defined()`, so `define()`-ing any of them is safe (no "cannot redeclare constant"
+fatal): `FORCE_2FA_DISABLE`, `FORCE_2FA_ENFORCED_CAPABILITY`, `FORCE_2FA_EXCLUDED_ROLES`,
+`FORCE_2FA_API_LOGIN_ALLOWLIST`, `FORCE_2FA_BLOCKING_MODE`, `FORCE_2FA_DISABLE_SELF_UPDATE`.
+
+Filters must NOT go in wp-config.php — `add_filter()` is not defined yet when
+wp-config.php runs, so a filter there fatals. Put `force_2fa_enforced_capability`,
+`force_2fa_excluded_roles`, `force_2fa_api_login_allowlist`, `force_2fa_user_is_exempt`,
+etc. in a small plugin, a companion mu-plugin, or your theme's functions.php. A filter
+overrides its constant; the `FORCE_2FA_DISABLE` kill switch is constant-only.
+
+If you use the mu-loader ("cannot be deactivated" mode), keep filter-based config in a
+companion mu-plugin so it is force-loaded alongside the plugin. Create a second flat
+file in wp-content/mu-plugins/, e.g. force-2fa-config.php:
+
+`
+<?php
+// wp-content/mu-plugins/force-2fa-config.php
+add_filter( 'force_2fa_excluded_roles', function () {
+	return array( 'subscriber', 'customer' );
+} );
+add_filter( 'force_2fa_api_login_allowlist', function () {
+	return array( 'svc-deploy', 'svc-monitoring' );
+} );
+`
+
+Load order is fine: the plugin reads these filters lazily during login (when Two
+Factor evaluates a user's providers), long after every mu-plugin, plugin, and theme
+has registered its filters — so mu-loading the plugin early never races the config.
+
 = How do I exempt a role from forced 2FA? =
 
-List the role slugs (lowercase keys such as `subscriber`, not display names) in
-the `FORCE_2FA_EXCLUDED_ROLES` constant. A user is exempt only if every role they
-hold is on the list, so excluding a low-privilege role can never accidentally
-exempt a privileged account.
+Set the role slugs (lowercase keys such as `subscriber`, not display names) in the
+`FORCE_2FA_EXCLUDED_ROLES` constant in wp-config.php:
 
-You can also override the effective list without editing this plugin:
+`
+define( 'FORCE_2FA_EXCLUDED_ROLES', array( 'subscriber', 'customer' ) );
+`
+
+This carves roles out of the enforcement *scope* (see above); a user is exempt only if
+every role they hold is on the list, so excluding a low-privilege role can never
+accidentally exempt a privileged account that also holds a higher role.
+
+You can also set the effective list at runtime with the `force_2fa_excluded_roles`
+filter (from a plugin, a companion mu-plugin, or your theme — not wp-config.php):
 
 `
 add_filter( 'force_2fa_excluded_roles', function () {
@@ -140,11 +218,26 @@ add_filter( 'force_2fa_excluded_roles', function () {
 } );
 `
 
+= What if users already use another 2FA plugin, like Wordfence? =
+
+Users whose 2FA is handled by Wordfence Login Security are skipped — the emailed floor is
+not added for them, so no one is pushed through two 2FA plugins at once (even though
+Wordfence offers no email method). The Wordfence check is built in and fails safe: if it
+errors, the email floor stays in place. To skip users protected by another external 2FA
+system, use the `force_2fa_user_is_exempt` filter to return true for them. Users on the
+Two Factor plugin are unaffected — email is still their floor, and their TOTP/WebAuthn
+stays primary.
+
 = How do I let an integration log in over XML-RPC? =
 
-Add its user ID or login to `FORCE_2FA_API_LOGIN_ALLOWLIST`, and have it
-authenticate with an Application Password. A real-password XML-RPC login is always
-denied, even for allowlisted accounts.
+Add its user ID or login to the `FORCE_2FA_API_LOGIN_ALLOWLIST` constant in
+wp-config.php (or via the `force_2fa_api_login_allowlist` filter from a plugin /
+companion mu-plugin / theme), and have it authenticate with an Application Password.
+A real-password XML-RPC login is always denied, even for allowlisted accounts.
+
+`
+define( 'FORCE_2FA_API_LOGIN_ALLOWLIST', array( 123, 'svc_headless' ) );
+`
 
 Important: this allowlist governs XML-RPC, not the REST API. Two Factor's only
 API-login gate runs on the `authenticate` filter, which XML-RPC uses; REST
@@ -235,10 +328,92 @@ API-login allowlist governs XML-RPC only: an XML-RPC login can skip the interact
 challenge only for allowlisted accounts using Application Passwords, while REST
 Application Password logins are not gated by Two Factor and are not restricted by
 the allowlist (scope REST access via roles/capabilities). Extending the allowlist to
-cover REST is on the roadmap (issue #41). Excluding a role also removes those accounts
-from this API-login gate.
+cover REST is on the roadmap (issue #41). The XML-RPC allowlist is enforced
+independently of the 2FA scope, so narrowing the scope never opens XML-RPC to accounts
+left out of the interactive challenge. Explicitly excluding a role is different: it
+opts those accounts out of this plugin's XML-RPC policy as well.
 
 == Changelog ==
+
+= 1.14.0 =
+* Merged: the 1.12.0–1.13.2 line (capability-scoped enforcement, the first-run scope
+  prompt, the scope-independent XML-RPC allowlist, the Wordfence exemption and the
+  primary-provider rule) is now combined with the role-exclusion fix for the API-login
+  gate, which had been made separately.
+* Changed: the two rules for XML-RPC logins are reconciled. An account you **explicitly
+  exclude** — with `FORCE_2FA_EXCLUDED_ROLES` or the `force_2fa_user_is_exempt` filter —
+  is opted out of the XML-RPC allowlist as well as the interactive challenge. An account
+  that is merely **outside the enforced-capability scope** (for example an editor when
+  enforcement is administrators-only), or whose 2FA is handled by Wordfence, is still
+  held to the allowlist + Application-Password policy. In 1.13.x an excluded role was
+  held to the allowlist too; if you relied on that, stop excluding the role, or disable
+  XML-RPC.
+* Self-updates come from `dknauss/Require-Email-2FA`.
+
+= 1.13.2 =
+* Fixed: the first-run enforcement-scope prompt offered the `edit_posts` option under the
+  label "Editors and up", but that capability is held by contributors and authors too, so
+  choosing it enforced the emailed floor on everyone who can write posts — broader than
+  the label promised. The option now reads "Contributors and up (anyone who can write
+  posts)", matching what it has always done. Wording only: the stored capability is
+  unchanged, so enforcement on existing installs is unaffected and no re-prompt is needed.
+
+= 1.13.1 =
+* New: users whose 2FA is handled by Wordfence Login Security are exempt from the
+  emailed floor, so no one is driven through two 2FA plugins at once. The Wordfence
+  check is built in and fail-safe (any detection error leaves the floor in place); to
+  skip users on another external 2FA system, use the existing `force_2fa_user_is_exempt`
+  filter. Email remains a floor for everyone else, including users who already have a
+  native Two Factor method (TOTP/WebAuthn get their method AND email).
+* Improved: the emailed method becomes the *primary* provider only when the user has no
+  other real method (no method, or backup-codes-only). A real method (TOTP, WebAuthn,
+  …) always keeps primary — the appended email floor no longer demotes it — via Two
+  Factor's `two_factor_primary_provider_for_user` filter. Stored settings are not
+  mutated.
+
+= 1.13.0 =
+* New: a first-run **enforcement-scope prompt**. On activation an admin notice offers a
+  one-time choice — All users / Editors and up / Administrators only (administrators
+  pre-selected) — folded into the existing setup notices, not a standing settings page.
+  Until a choice is made the secure default (all users) applies; the choice is stored,
+  cleared on deactivation (so reactivating re-prompts — the "start over" path), and
+  purged on uninstall. A `FORCE_2FA_ENFORCED_CAPABILITY` constant overrides the choice
+  and suppresses the prompt (infra-as-code wins).
+* Changed: the **XML-RPC API-login allowlist is now enforced independently of the 2FA
+  scope**. Previously, narrowing enforcement (or excluding a role) dropped out-of-scope
+  accounts from the allowlist too; now every XML-RPC login is held to the allowlist +
+  Application-Password policy for all users, whatever the scope. (Governs XML-RPC, not
+  REST.)
+* Fixed: `FORCE_2FA_EXCLUDED_ROLES` and `FORCE_2FA_API_LOGIN_ALLOWLIST` are now read via
+  `defined()`, so setting them in wp-config.php no longer fatals with "cannot redeclare
+  constant". Every FORCE_2FA_* constant is now safe to define in wp-config.php.
+* Docs: a "Where configuration goes" section — constants in wp-config.php, filters in a
+  plugin/companion mu-plugin/theme — plus a companion-mu-plugin example.
+* Performance: the per-user enforcement-scope evaluation is memoized for the duration of
+  a request (flushed per user on `clean_user_cache`), so the network-wide capability/role
+  lookup no longer repeats each time Two Factor reads a user's providers. No behavior
+  change.
+
+= 1.12.0 =
+* New **optional capability-scoping** to narrow enforcement to privileged accounts.
+  Define `FORCE_2FA_ENFORCED_CAPABILITY` in wp-config.php (or use the
+  `force_2fa_enforced_capability` filter) with the capability a user must hold to be
+  forced — e.g. `manage_options` for admins-only, or `edit_posts` for contributors and
+  up. **The default is unchanged: all users are still enforced** (the constant
+  defaults to `''`). Read via `defined()` (like `FORCE_2FA_DISABLE`) so it is safe to
+  `define()` in wp-config.php.
+* The capability check is network-wide on multisite: a user is in scope if they are a
+  super admin or hold the capability on any site they belong to (so an admin of one
+  subsite can't skip enforcement by logging in through another). The per-site role
+  exclusion (`FORCE_2FA_EXCLUDED_ROLES`) is likewise evaluated across the user's sites.
+* Raised the minimum WordPress version to 6.8, matching the current Two Factor
+  release's own requirement (Two Factor 0.16.0 requires WordPress 6.8+); on older
+  WordPress the one-click installer cannot install it and nothing enforces.
+* Note: narrowing the scope also removes out-of-scope accounts from the XML-RPC
+  API-login hardening (governs XML-RPC, not REST), the same trade-off as
+  `FORCE_2FA_EXCLUDED_ROLES` — documented in the FAQ. `FORCE_2FA_EXCLUDED_ROLES` and
+  the `force_2fa_user_is_exempt` filter are unchanged. No change to blocking mode or
+  the kill switch.
 
 = 1.11.0 =
 * New optional **blocking mode** (`FORCE_2FA_BLOCKING_MODE`, or the

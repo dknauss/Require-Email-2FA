@@ -4,13 +4,13 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ## What this is
 
-A single-purpose, security-focused WordPress plugin (slug `force-email-two-factor`) that makes the [Two Factor](https://wordpress.org/plugins/two-factor/) plugin's emailed passcodes a mandatory login baseline for every user, and locks the XML-RPC/REST API-login path down to an allowlist of Application-Password-authenticated accounts. There is no admin UI, no options page, no database state — all operator configuration is via `wp-config.php` constants or filters. Changes should stay narrow, testable, and easy to audit (see CONTRIBUTING.md).
+A single-purpose, security-focused WordPress plugin (slug `force-email-two-factor`) that makes the [Two Factor](https://wordpress.org/plugins/two-factor/) plugin's emailed passcodes a mandatory login baseline for every user (optionally narrowable to a capability, e.g. admins-only, via `FORCE_2FA_ENFORCED_CAPABILITY`), and locks the XML-RPC API-login path down to an allowlist of Application-Password-authenticated accounts (the allowlist governs XML-RPC, not REST — REST Application-Password logins bypass Two Factor's authenticate gate). The only UI is a one-time first-run admin notice to choose the enforcement scope (all users / contributors+ (`edit_posts`) / admins-only), and its single stored option is the only database state; otherwise all operator configuration is via `wp-config.php` constants or filters. Changes should stay narrow, testable, and easy to audit (see CONTRIBUTING.md).
 
 Production code is only three files, all procedural PHP with `force_2fa_` / `FORCE_2FA_` prefixes:
 
-- `force-email-two-factor.php` — the entire plugin (~1,700 lines; extensively commented)
+- `force-email-two-factor.php` — the entire plugin (~1,900 lines; extensively commented)
 - `mu-loader.php` — optional one-line mu-plugin loader ("cannot be deactivated" mode)
-- `uninstall.php` — purges the only persistent footprint (Plugin Update Checker's site option + cron)
+- `uninstall.php` — purges the persistent footprint (Plugin Update Checker's site option + cron, and the `force_2fa_enforced_capability` scope-choice option)
 
 `vendor/` is **committed to git** (the vendored `yahnis-elsts/plugin-update-checker` is a reviewed supply-chain decision — see `docs/SUPPLY-CHAIN-SECURITY.md`). Never hand-edit it.
 
@@ -37,11 +37,14 @@ vendor/bin/phpunit --coverage-text           # needs PCOV or Xdebug
 End-to-end scripts (what CI runs; each builds a real WordPress with the SQLite drop-in):
 
 ```sh
-bash bin/multisite-e2e.sh       # network-only activation behavior on a real multisite
-bash bin/api-login-e2e.sh       # Application Password API-login allowlist behavior
-bash bin/install-handler-e2e.sh # one-click Two Factor installation handler
-bash bin/blocking-mode-e2e.sh   # required-setup blocking mode with real Two Factor
-bash bin/update-e2e.sh          # real update from a GitHub Release asset (set GITHUB_TOKEN)
+bash bin/multisite-e2e.sh        # network-only activation behavior on a real multisite
+bash bin/multisite-scope-e2e.sh  # network-wide capability + role scope (cross-site bypass)
+bash bin/api-login-e2e.sh        # Application Password API-login allowlist behavior
+bash bin/scope-activation-e2e.sh # first-run scope choice: storage, precedence, deactivate-clears
+bash bin/email-fallback-e2e.sh   # email floor for native-method users + email-as-primary logic
+bash bin/install-handler-e2e.sh  # one-click Two Factor installation handler
+bash bin/blocking-mode-e2e.sh    # required-setup blocking mode with real Two Factor
+bash bin/update-e2e.sh           # real update from a GitHub Release asset (set GITHUB_TOKEN)
 ```
 
 The plugin **runtime** supports PHP 7.2+; dev tooling deliberately requires modern PHP. Cross-version safety is enforced by `php -l` across 7.2–8.4 and PHPCompatibility (`testVersion 7.2-`) in CI — do not use post-7.2 syntax in the three production files (tests and `bin/` may use newer syntax).
@@ -57,11 +60,12 @@ Hook registration is centralized in `force_2fa_register_hooks()` near the bottom
 ### The enforcement model
 
 - **Soft dependency:** Two Factor being absent must never fatal — every enforcement path bails via `force_2fa_dependency_met()` (checks `Two_Factor_Core` and that the `Two_Factor_Email` provider is actually registered), and the plugin's only behavior in that state is an admin notice with a one-click installer.
-- **Append, never replace:** `force_2fa_filter_enabled_providers()` (hooked to Two Factor's `two_factor_enabled_providers_for_user` filter) appends the Email provider to a user's list. Users' stronger factors (TOTP, WebAuthn) and backup codes must always be preserved.
-- **API logins:** allowed to skip interactive 2FA only when the account is on the explicit allowlist **and** the request authenticated with an Application Password (tracked via `force_2fa_note_app_password_user()` binding the app-password user to the request). Everything else on the API path is denied.
+- **Append, never replace:** `force_2fa_filter_enabled_providers()` (hooked to Two Factor's `two_factor_enabled_providers_for_user` filter) appends the Email provider to an in-scope user's list. Users' stronger factors (TOTP, WebAuthn) and backup codes must always be preserved. Email stays a floor for everyone in scope — including users who already have a native method. **External 2FA exemption:** users whose 2FA is handled by Wordfence (bundled defensive `force_2fa_wordfence_2fa_active()` check — the only built-in integration; other systems use the `force_2fa_user_is_exempt` filter) are marked exempt in `force_2fa_compute_exemption()`, so the existing "exempt → don't append" path skips the floor. **Primary provider:** `force_2fa_filter_primary_provider()` (Two Factor's `two_factor_primary_provider_for_user`) makes Email primary only when the user has no *real* method — `force_2fa_is_real_2fa_provider_key()` (single source of truth) excludes Email, Backup Codes, and the debug-only `Two_Factor_Dummy`. A real method always outranks the email floor; stored primary meta is never mutated.
+- **Enforcement scope, default all users:** `force_2fa_user_is_exempt()` delegates to the pure `force_2fa_exemption_decision()`. `FORCE_2FA_ENFORCED_CAPABILITY` is an opt-in gate — when set (e.g. `manage_options`), users lacking that capability are exempt. `force_2fa_enforced_capability()` precedence: **wp-config constant → stored first-run choice (`force_2fa_scope_choice_get()`) → `''` (everyone)**, then the filter. The first-run notice + `admin_post` handler store the choice; a defined constant suppresses the prompt; deactivation clears it (re-prompt). On multisite both the capability check and the `FORCE_2FA_EXCLUDED_ROLES` carve-out are evaluated **network-wide** (super admin, or the capability/role on any of the user's sites), since WordPress logins are network-wide — a per-login-site check would be a cross-site bypass. **The XML-RPC API-login allowlist is scope-independent:** `force_2fa_gate_api_login()` (on `authenticate`) holds every XML-RPC login to the allowlist + app-password policy whether or not the account is in the capability scope, so narrowing the scope never opens XML-RPC to out-of-scope accounts (governs XML-RPC, not REST). **An explicit exclusion is different:** `force_2fa_user_is_explicitly_excluded()` (role denylist or the `force_2fa_user_is_exempt` filter, never capability scope or Wordfence) opts an account out of the XML-RPC gate too.
+- **API logins:** an XML-RPC login is allowed only when the account is on the explicit allowlist **and** the request authenticated with an Application Password (tracked via `force_2fa_note_app_password_user()`); everything else on the XML-RPC path is denied. Enforced by two hooks with the same policy: `force_2fa_filter_api_login_enable()` (Two Factor's `two_factor_user_api_login_enable`, in-scope users) **and** `force_2fa_gate_api_login()` (own `authenticate` gate) which extends it to every account regardless of the 2FA scope. Both pass an explicitly excluded account through. Pure decision: `force_2fa_api_login_should_deny()`. REST is not gated.
 - **Multisite is network-only:** a `register_activation_hook` guard (`force_2fa_block_single_site_activation()`) refuses per-site activation. A `Network: true` header is deliberately **not** used — core would silently promote per-site activation to network-wide instead of refusing. Don't "fix" this.
 
-Operator configuration surface (keep it constants + filters, nothing else): `FORCE_2FA_DISABLE`, `FORCE_2FA_EXCLUDED_ROLES` / `force_2fa_excluded_roles`, `FORCE_2FA_API_LOGIN_ALLOWLIST` / `force_2fa_api_login_allowlist`, `force_2fa_user_is_exempt`, `FORCE_2FA_DISABLE_SELF_UPDATE` / `force_2fa_self_update_enabled`.
+Operator configuration surface (keep it constants + filters, nothing else): `FORCE_2FA_DISABLE`, `FORCE_2FA_ENFORCED_CAPABILITY` / `force_2fa_enforced_capability`, `FORCE_2FA_EXCLUDED_ROLES` / `force_2fa_excluded_roles`, `FORCE_2FA_API_LOGIN_ALLOWLIST` / `force_2fa_api_login_allowlist`, `force_2fa_user_is_exempt`, `FORCE_2FA_DISABLE_SELF_UPDATE` / `force_2fa_self_update_enabled`.
 
 ### Self-update path
 
@@ -85,6 +89,6 @@ PHPStan runs at level 5 over the three production files only. Two Factor is abse
 
 - **Versioning:** the version appears in three places that must stay in lockstep — the `Version:` plugin header, the `FORCE_2FA_LOADED` define in `force-email-two-factor.php`, and `Stable tag:` in `readme.txt`. The release workflow (tag-triggered, `v*`) refuses to publish if the tag doesn't match the `Version:` header or the commit isn't on `main`.
 - **Docs travel with behavior:** `README.md` (GitHub) and `readme.txt` (WordPress-style) describe the same behavior in parallel and both need updating when behavior, requirements, or rollout guidance changes; `docs/DEPLOYMENT.md` covers the two update modes.
-- **Don't add** UI, options, database tables, cron jobs, or remote calls without a strong reason — statelessness is a design guarantee (`uninstall.php`'s header documents the only persistent footprint).
+- **Keep the surface minimal** — near-statelessness is a design value. The only deliberate exceptions are the first-run scope notice + its single option (`force_2fa_enforced_capability`, purged on deactivate and uninstall). Don't add further UI, options, database tables, cron jobs, or remote calls without a strong reason (`uninstall.php`'s header documents the persistent footprint).
 - **Fail-safe over fail-closed on missing dependency:** if Two Factor or a provider is absent, avoid fatals and avoid corrupting users' provider lists.
-- CI (`.github/workflows/ci.yml`) runs lint (PHP 7.2–8.4), PHPCS, PHPStan, PHPUnit (8.2–8.4), coverage, a Playground integration job, and all E2E scripts; CodeQL and Semgrep also scan PRs. All GitHub Actions are pinned to full commit SHAs — keep that when editing workflows.
+- CI (`.github/workflows/ci.yml`) runs lint (PHP 7.2–8.4), PHPCS, PHPStan, PHPUnit (8.2–8.4), coverage, a Playground integration job, a minimum-WordPress (6.8) E2E, and all E2E scripts; CodeQL and Semgrep also scan PRs. All GitHub Actions are pinned to full commit SHAs — keep that when editing workflows.

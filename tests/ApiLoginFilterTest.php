@@ -52,6 +52,15 @@ final class ApiLoginFilterTest extends TestCase {
 		$this->assertTrue( force_2fa_filter_api_login_enable( false, $user ) );
 	}
 
+	public function test_out_of_scope_user_does_not_bypass_the_api_gate(): void {
+		// Out of the enforced-capability scope is not an exclusion: an editor under an
+		// admins-only scope is exempt from forced 2FA but still needs the allowlist.
+		$this->enforceCapability( 'manage_options' );
+		$user = $this->user( 6, 'scopededitor', array( 'editor' ) );
+		$this->appPasswordUsed( true, 6 );
+		$this->assertFalse( force_2fa_filter_api_login_enable( true, $user ) );
+	}
+
 	public function test_resolves_user_from_id(): void {
 		$this->allowlist( array( 5 ) );
 		$this->user( 5, 'svc', array( 'author' ) );

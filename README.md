@@ -1,11 +1,12 @@
 # Require Email 2FA
 
 [![CI](https://github.com/dknauss/Require-Email-2FA/actions/workflows/ci.yml/badge.svg)](https://github.com/dknauss/Require-Email-2FA/actions/workflows/ci.yml)
+[![Coverage floor: 90%](https://img.shields.io/badge/coverage%20floor-%E2%89%A590%25-brightgreen.svg)](https://github.com/dknauss/Require-Email-2FA/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/dknauss/Require-Email-2FA?sort=semver&label=release)](https://github.com/dknauss/Require-Email-2FA/releases/latest)
 [![Docs](https://img.shields.io/badge/docs-deployment%20%26%20supply%20chain-3858e9.svg)](docs/DEPLOYMENT.md)
 
 [![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](LICENSE)
-[![Requires WordPress 6.5+](https://img.shields.io/badge/WordPress-6.5%2B-21759b?logo=wordpress&logoColor=white)](https://wordpress.org/)
+[![Requires WordPress 6.8+](https://img.shields.io/badge/WordPress-6.8%2B-21759b?logo=wordpress&logoColor=white)](https://wordpress.org/)
 [![Tested up to WordPress 7.0](https://img.shields.io/badge/tested%20up%20to-WordPress%207.0-21759b?logo=wordpress&logoColor=white)](https://wordpress.org/download/)
 [![Requires PHP 7.2+](https://img.shields.io/badge/PHP-7.2%2B-777bb4?logo=php&logoColor=white)](https://www.php.net/supported-versions.php)
 [![Requires Plugin: Two Factor](https://img.shields.io/badge/requires-Two%20Factor-3858e9.svg)](https://wordpress.org/plugins/two-factor/)
@@ -15,7 +16,7 @@ This is a Multisite compatible, single-purpose, WordPress utility plugin with no
 
 Require Email 2FA imposes three requirements site- or network-wide:
 
-1. The [Two Factor plugin](https://wordpress.org/plugins/two-factor/) must be installed and activated.
+1. The [Two Factor plugin](https://wordpress.org/plugins/two-factor/) must be installed and activated. Its current release requires **WordPress 6.8+**, which is therefore this plugin's minimum too — on older WordPress the one-click installer cannot install Two Factor and nothing can be enforced.
 2. All users must use Two Factor to log in. (Exceptions can be set with a constant or filter.)
 3. Users who do not have a different method selected in their two-factor settings will receive time-based, one-time passcodes by email.
 
@@ -23,7 +24,7 @@ The plugin also hardens the XML-RPC login path with a named allowlist of service
 
 On multisite the plugin is **network-only** (Network Activate; per-site activation is blocked), and an optional `mu-loader.php` file can be moved to the `/mu-plugins` folder to make it un-deactivatable within the WordPress admin interface.
 
-Require Email 2FA's dependency on Two Factor is *soft*: the Require Email 2FA plugin activates on its own and does nothing until Two Factor is active. It only displays a prominent admin notice with a one-click installer for the Two Factor plugin. Administrators should pre-install and activate Two Factor or do so immediately after installing and activating Require Email 2FA. Then Require Email 2FA will automatically select emailed passcodes as the primary (default) 2FA method for all users who do not have a different one selected. This enforcement will continue for all existing and new users as long as Require Email 2FA is active.
+Require Email 2FA's dependency on Two Factor is *soft*: the Require Email 2FA plugin activates on its own and does nothing until Two Factor is active. It only displays a prominent admin notice with a one-click installer for the Two Factor plugin. Administrators should pre-install and activate Two Factor or do so immediately after installing and activating Require Email 2FA. Then Require Email 2FA will automatically select emailed passcodes as the primary (default) 2FA method for all users who do not have a different one selected. This enforcement will continue for all existing and new users as long as Require Email 2FA is active. Enforcement can optionally be narrowed to privileged accounts (e.g. administrators only) — see [Enforcement scope](#enforcement-scope-who-is-required-to-use-2fa).
 
 > [!TIP]
 > **▶ [Try it live in WordPress Playground][playground]** — boots a disposable WordPress with this plugin already active and Two Factor *not yet installed*, so you land on the Plugins screen and see the guided **"Install & activate Two Factor"** notice. A handful of sample users (across roles) are created so you can browse profiles. No local install needed; nothing is saved.
@@ -37,11 +38,20 @@ Require Email 2FA's dependency on Two Factor is *soft*: the Require Email 2FA pl
 1. **Forces 2FA for everyone (by default).** It ensures the (assumed) always-available,
    zero-setup **Email** provider is enabled for every user, so the login
    challenge appears for all accounts — including ones that never configured 2FA.
-   Enforcement can be scoped with **per-role exclusions**. (See Configuration.)
+   Enforcement can optionally be **narrowed to a capability** (e.g. administrators
+   only) and scoped with **per-role exclusions**. (See Configuration.)
 
    It *appends* Email rather than replacing the provider list, so users who set
    up a stronger factor (TOTP, hardware key / WebAuthn) keep it as their primary
-   method, and **backup codes remain available** as a recovery path.
+   method, and **backup codes remain available** as a recovery path. Email becomes the
+   **primary** method only when the user has no other real method (no method, or
+   backup-codes-only); a configured TOTP/WebAuthn always stays primary.
+
+   > **Using Wordfence's 2FA?** Users whose 2FA is handled by **Wordfence Login Security**
+   > are **skipped** — the email floor is not added for them, so no one is pushed through
+   > two 2FA plugins at once. The Wordfence check is built in and fails safe (if it errors,
+   > the email floor stays). To skip users protected by *another* external 2FA system, use
+   > the `force_2fa_user_is_exempt` filter to return `true` for them.
 
 2. **Restricts XML-RPC logins.** Non-interactive logins bypass the interactive
    2FA screen. This plugin allows such a login to skip 2FA **only** when *both*:
@@ -149,6 +159,62 @@ Before enabling enforcement on a production site:
 
 ## Configuration
 
+There is **no options page** — every setting is a `wp-config.php` constant or a filter.
+
+### Where configuration goes
+
+**Every `FORCE_2FA_*` constant can go in `wp-config.php`.** They are all read with
+`defined()`, so `define()`-ing any of them is safe — there is no in-file `const` to
+clash with, and no "cannot redeclare constant" fatal:
+
+```php
+// wp-config.php
+define( 'FORCE_2FA_ENFORCED_CAPABILITY', 'manage_options' ); // admins-only scope
+define( 'FORCE_2FA_EXCLUDED_ROLES', array( 'subscriber' ) );  // carve out a role
+define( 'FORCE_2FA_API_LOGIN_ALLOWLIST', array( 'svc-deploy' ) );
+define( 'FORCE_2FA_BLOCKING_MODE', true );
+```
+
+**Filters must NOT go in `wp-config.php`.** `add_filter()` is not defined yet when
+`wp-config.php` runs (WordPress loads it *before* `wp-includes/plugin.php`), so a filter
+there fatals with *"call to undefined function add_filter()"*. Put filters —
+`force_2fa_enforced_capability`, `force_2fa_excluded_roles`,
+`force_2fa_api_login_allowlist`, `force_2fa_user_is_exempt`,
+`force_2fa_blocking_mode_enabled`, `force_2fa_self_update_enabled` — where `add_filter()`
+exists: a small plugin, a **companion mu-plugin**, or your theme's `functions.php`.
+
+Two rules worth remembering:
+
+- **A filter overrides its constant.** If you set both, the filter wins (it is applied
+  over the constant's value). Handy for environment-specific overrides; surprising if
+  you forget a stray filter is there.
+- **The kill switch is constant-only.** `FORCE_2FA_DISABLE` is checked at load and has no
+  filter, so it can't be accidentally toggled by one — it's a reliable break-glass.
+
+> [!TIP]
+> **Using the [mu-loader](#optional-cannot-be-deactivated-mode-mu-loader)?** Keep filter-based
+> config in a **companion mu-plugin** — a second flat file in `wp-content/mu-plugins/` — so
+> it's force-loaded and un-deactivatable alongside the plugin (the same reason you reached for
+> the mu-loader):
+>
+> ```php
+> <?php
+> // wp-content/mu-plugins/force-2fa-config.php
+> add_filter( 'force_2fa_excluded_roles', function () {
+>     return array( 'subscriber', 'customer' );
+> } );
+> add_filter( 'force_2fa_api_login_allowlist', function () {
+>     return array( 'svc-deploy', 'svc-monitoring' );
+> } );
+> ```
+>
+> Load order is not a concern: the plugin reads these filters **lazily at enforcement time**
+> (during login, when Two Factor evaluates a user's providers) — long after every mu-plugin,
+> plugin, and theme has registered its filters. So the early mu-loader load never races the
+> config. `functions.php` also works, but a companion mu-plugin is more robust: a theme switch
+> silently drops `functions.php` config (it fails safe — no exclusions means everyone enforced,
+> no allowlist means API logins denied — but it's easy to forget).
+
 ### Optional: blocking mode (require setup before access)
 
 By default this plugin uses a **soft floor**: it appends the Email provider so the
@@ -211,18 +277,81 @@ It is deliberately built to be **impossible to dead-end**:
 See [`docs/TESTING-BLOCKING-MODE.md`](docs/TESTING-BLOCKING-MODE.md) for a manual test
 checklist and the `bin/blocking-mode-e2e.sh` end-to-end check.
 
-### Excluding roles from forced 2FA
+### Enforcement scope (who is required to use 2FA)
 
-Enforcement applies to **all** users by default. To exempt specific roles, list
-their slugs (lowercase keys like `subscriber`, `customer` — not display names) in
-the `FORCE_2FA_EXCLUDED_ROLES` constant:
+**By default, forced 2FA applies to every user.** This is the security baseline: the
+emailed floor covers all accounts, so the login challenge protects everyone, not just
+administrators. (The [XML-RPC API-login hardening](#security-model) is enforced for all
+accounts *regardless* of this scope — narrowing it never opens XML-RPC.)
+
+> **No `wp-config.php` access? Pick the scope right after activating.** A one-time
+> admin notice appears on first run with a radio — **All users / Contributors and up /
+> Administrators only** (administrators pre-selected) — and one click saves it. Until
+> you choose, the secure default (all users) applies. To change it later, deactivate and
+> reactivate the plugin. Defining the constant below suppresses the prompt (code wins).
+
+If you want to **narrow** enforcement to privileged accounts, define the
+`FORCE_2FA_ENFORCED_CAPABILITY` constant in `wp-config.php` (this always overrides the
+first-run choice). The most common choice is administrators only:
 
 ```php
-const FORCE_2FA_EXCLUDED_ROLES = array( 'subscriber', 'customer' );
+// wp-config.php — force 2FA only on users who can manage the site.
+define( 'FORCE_2FA_ENFORCED_CAPABILITY', 'manage_options' );
 ```
 
-Or, without editing this plugin file, override the effective list from a small
-site-specific plugin or mu-plugin:
+Any capability works — e.g. `'edit_posts'` to cover contributors and up. Leaving the
+constant undefined (or setting it to `''`) keeps the default: **all users**. You can
+also set it at runtime from a small site-specific plugin or mu-plugin via the
+`force_2fa_enforced_capability` filter:
+
+```php
+add_filter( 'force_2fa_enforced_capability', function () {
+	return 'manage_options'; // admins-only
+} );
+```
+
+> **Set it in `wp-config.php`.** Like every `FORCE_2FA_*` constant, it is read with
+> `defined()`, so `define()`-ing it in `wp-config.php` is safe — no "cannot redeclare
+> constant" fatal. A `force_2fa_enforced_capability` filter, if you add one, overrides
+> the constant — see [Where configuration goes](#where-configuration-goes).
+
+> **Narrowing the scope does NOT weaken the XML-RPC hardening.** The
+> [API-login allowlist](#security-model) is enforced independently of the 2FA scope —
+> the plugin holds *every* XML-RPC login to the allowlist + Application-Password policy,
+> in scope or not. So you can scope interactive 2FA to admins without opening XML-RPC
+> to everyone else. The one exception is an account you [explicitly
+> exclude](#excluding-roles-from-forced-2fa). (The allowlist governs XML-RPC only; REST
+> Application-Password logins bypass the authenticate chain regardless — see the
+> Security model.)
+
+> **Why a capability, not the `administrator` role slug?** A capability check catches
+> super admins and any custom or plugin-defined role that grants admin access,
+> whereas hard-coding the `administrator` slug would silently miss them. On
+> **multisite** the check is **network-wide**: a user is in scope if they are a super
+> admin, or hold the capability on **any** site they belong to — not just the site
+> they log in through. (WordPress logins are network-wide, so a per-site check would
+> let an admin of one subsite sign in via another where they hold only a low role and
+> skip enforcement.) The role exclusion (`FORCE_2FA_EXCLUDED_ROLES`) is evaluated
+> across the user's sites in the same way.
+
+If you need a specific account included or excluded regardless of capability, use the
+`force_2fa_user_is_exempt` filter (below).
+
+### Excluding roles from forced 2FA
+
+You can also carve out specific roles from enforcement — either from the default
+all-users scope, or from a narrowed capability scope.
+List their slugs (lowercase keys like `subscriber`, `customer` — not display names)
+in the `FORCE_2FA_EXCLUDED_ROLES` constant in `wp-config.php`:
+
+```php
+// wp-config.php
+define( 'FORCE_2FA_EXCLUDED_ROLES', array( 'subscriber', 'customer' ) );
+```
+
+Or set the effective list at runtime with the `force_2fa_excluded_roles` filter from a
+plugin, a companion mu-plugin, or your theme — **not `wp-config.php`** (see
+[Where configuration goes](#where-configuration-goes)):
 
 ```php
 add_filter( 'force_2fa_excluded_roles', function () {
@@ -248,12 +377,12 @@ exempt on that site. Choose excluded roles deliberately, and prefer the
 Exclusion means "don't *force* 2FA"; it doesn't forbid it. An excluded user who
 set up their own 2FA keeps it.
 
-> **Excluding a role also removes those accounts from the API-login hardening.**
-> Two Factor only gates the API login of a user it considers "using 2FA." An
-> excluded account with no other factor configured is not using 2FA, so Two
-> Factor never gates its XML-RPC/REST logins — the API-login allowlist does not
-> apply to it. Don't exclude a role for accounts you also expect the API allowlist
-> to govern.
+> **Excluding a role also opts it out of the XML-RPC allowlist.** An exclusion says this
+> plugin's policy does not apply to those accounts, and that covers both the
+> interactive login challenge and the API-login gate: an excluded account can log in
+> over XML-RPC without being on the allowlist. This is the difference from narrowing
+> the [enforcement scope](#enforcement-scope-who-is-required-to-use-2fa), which never
+> widens XML-RPC access. Exclude a role only if you accept both effects.
 
 For one-off cases (e.g. exempt a single user ID rather than a whole role), use the
 `force_2fa_user_is_exempt` filter instead of editing the role list:
@@ -630,6 +759,9 @@ composer check                      # phpcs + phpstan + all tests
 vendor/bin/phpunit --testsuite integration   # one suite
 vendor/bin/phpunit --coverage-text  # coverage (needs Xdebug or PCOV)
 bash bin/multisite-e2e.sh           # disposable real multisite, network-only guard
+bash bin/api-login-e2e.sh           # real Two Factor, XML-RPC allowlist enforcement
+bash bin/install-handler-e2e.sh     # one-click Two Factor installation flow
+bash bin/blocking-mode-e2e.sh       # optional setup gate against real Two Factor
 bash bin/update-e2e.sh              # disposable real site, GitHub Release update path
 ```
 
@@ -646,13 +778,20 @@ request:
 - **lint** — `php -l`, PHP 7.2–8.4
 - **PHPCS / PHPCompatibility** — coding standards + the PHP 7.2 floor
 - **PHPUnit** — unit + integration, PHP 8.2–8.4
-- **coverage** — PHPUnit coverage (PCOV); summary in the job's GitHub summary,
-  clover uploaded as an artifact
+- **coverage** — combined PHPUnit line coverage across the normal and
+  Two-Factor-absent suites (PCOV), enforced at a 90% floor; summary in the job's
+  GitHub summary and Clover reports uploaded as artifacts
 - **Playground integration** — boots a real WordPress + the real Two Factor
   plugin headlessly and asserts enforcement end-to-end (see
   [`playground/ci-blueprint.json`](playground/ci-blueprint.json))
 - **Multisite E2E** — boots a disposable SQLite-backed multisite and asserts
   per-site activation is refused while network activation succeeds.
+- **API-login E2E** — runs against real Two Factor and asserts the XML-RPC
+  allowlist requires both an allowed account and Application Password authentication.
+- **Install-handler E2E** — exercises the one-click Two Factor installer against
+  a disposable real WordPress site.
+- **Blocking-mode E2E** — asserts an unconfigured user is gated on interactive
+  requests and released after enabling a real Two Factor provider.
 - **Update E2E** — boots a disposable SQLite-backed site, installs the committed
   tree (`git archive`, the release layout) rewritten to an older version, forces
   an update check, and asserts by exact URL match that WordPress updates it from

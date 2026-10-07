@@ -41,6 +41,13 @@ function register_activation_hook( $file, $cb ) {
 	return true;
 }
 
+// Deactivation hook: registered at load for the scope-choice clear. Recorded so a
+// test can assert the wiring; the callback runs only on a real deactivation.
+function register_deactivation_hook( $file, $cb ) {
+	$GLOBALS['__force2fa_deactivation_hooks'][] = $cb;
+	return true;
+}
+
 /**
  * Returns a per-hook override when a test set one, otherwise passes the value
  * through unchanged (WordPress's default behaviour with no filters attached).
@@ -98,9 +105,33 @@ function is_multisite() {
 }
 
 // Delete a network/site option. Records the keys deleted so the uninstall test can
-// assert exactly which options were purged, without a real WordPress options store.
+// assert exactly which options were purged, and also removes it from the network-option
+// store so get_site_option() reflects the deletion (scope-choice lifecycle tests).
 function delete_site_option( $option ) {
 	$GLOBALS['__force2fa_deleted_site_options'][] = $option;
+	unset( $GLOBALS['__force2fa_site_options'][ $option ] );
+	return true;
+}
+
+// --- Options store stubs (single-site: __force2fa_options; network: __force2fa_site_options) ---
+
+function update_option( $name, $value ) {
+	$GLOBALS['__force2fa_options'][ $name ] = $value;
+	return true;
+}
+
+function delete_option( $name ) {
+	unset( $GLOBALS['__force2fa_options'][ $name ] );
+	return true;
+}
+
+function get_site_option( $name, $default_value = false ) {
+	$store = $GLOBALS['__force2fa_site_options'] ?? array();
+	return array_key_exists( $name, $store ) ? $store[ $name ] : $default_value;
+}
+
+function update_site_option( $name, $value ) {
+	$GLOBALS['__force2fa_site_options'][ $name ] = $value;
 	return true;
 }
 
@@ -138,6 +169,11 @@ function restore_current_blog() {
 	return true;
 }
 
+// The current site's blog id (defaults to 1); used by the network-aware scope gate.
+function get_current_blog_id() {
+	return (int) ( $GLOBALS['__force2fa_current_blog_id'] ?? 1 );
+}
+
 // Current-user capability check. Defaults to a fully-capable admin (every cap); a
 // test can set $GLOBALS['__force2fa_user_caps'] to the exact caps the user holds
 // to exercise a capability-limited role (e.g. can activate but not install).
@@ -146,6 +182,51 @@ function current_user_can( $cap ) {
 		return in_array( $cap, $GLOBALS['__force2fa_user_caps'], true );
 	}
 	return true;
+}
+
+// Per-user capability check used by the enforcement-scope gate
+// (force_2fa_user_is_exempt). Accepts a WP_User or a user ID and reads the caps
+// carried by the WP_User stub (see its constructor / has_cap()).
+function user_can( $user, $cap ) {
+	if ( ! $user instanceof WP_User ) {
+		$user = get_userdata( $user );
+	}
+	return $user instanceof WP_User ? $user->has_cap( $cap ) : false;
+}
+
+// Site-specific capability check (WordPress 6.7+), used by the network-aware scope
+// gate. A test can set $GLOBALS['__force2fa_site_caps'][ $site_id ][ $user_id ] to a
+// cap => true map to model different capabilities on different subsites; otherwise it
+// falls back to the user's own caps (same as user_can()).
+function user_can_for_site( $user, $site_id, $cap ) {
+	$id  = $user instanceof WP_User ? $user->ID : (int) $user;
+	$map = $GLOBALS['__force2fa_site_caps'][ $site_id ][ $id ] ?? null;
+	if ( is_array( $map ) ) {
+		return ! empty( $map[ $cap ] );
+	}
+	$resolved = $user instanceof WP_User ? $user : get_userdata( $id );
+	return $resolved instanceof WP_User ? $resolved->has_cap( $cap ) : false;
+}
+
+// Super-admin check. A test lists super-admin user IDs in
+// $GLOBALS['__force2fa_super_admins']; empty/unset means none.
+function is_super_admin( $user_id = 0 ) {
+	return in_array( (int) $user_id, $GLOBALS['__force2fa_super_admins'] ?? array(), true );
+}
+
+// The sites a user belongs to (multisite), used by the network-wide scope check.
+// A test lists a user's site IDs in $GLOBALS['__force2fa_user_blogs'][ $user_id ];
+// each is returned as an object with a userblog_id property, mirroring core.
+function get_blogs_of_user( $user_id ) {
+	// Count invocations so a test can assert the memoized exemption avoids re-running
+	// the per-site loop (see MemoizationTest).
+	$GLOBALS['__force2fa_get_blogs_calls'] = ( $GLOBALS['__force2fa_get_blogs_calls'] ?? 0 ) + 1;
+
+	$blogs = array();
+	foreach ( $GLOBALS['__force2fa_user_blogs'][ $user_id ] ?? array() as $site_id ) {
+		$blogs[] = (object) array( 'userblog_id' => (int) $site_id );
+	}
+	return $blogs;
 }
 
 // --- Notice / install-handler glue stubs --------------------------------------
@@ -225,18 +306,88 @@ class Force2FA_WpDieException extends \RuntimeException {}
 
 // --- WordPress class stubs ----------------------------------------------------
 
+// Minimal WP_Error: enough for the API-login gate to signal a denied authenticate
+// result and for a test to read the error code back.
+if ( ! class_exists( 'WP_Error' ) ) {
+	class WP_Error {
+		public $errors = array();
+
+		public function __construct( $code = '', $message = '' ) {
+			if ( '' !== $code ) {
+				$this->errors[ $code ][] = $message;
+			}
+		}
+
+		public function get_error_code() {
+			foreach ( $this->errors as $code => $messages ) {
+				return $code;
+			}
+			return '';
+		}
+	}
+}
+
 if ( ! class_exists( 'WP_User' ) ) {
 	class WP_User {
 		public $ID;
 		public $user_login;
 		public $roles;
+		public $allcaps;
 
-		public function __construct( $id = 0, $user_login = '', array $roles = array() ) {
+		public function __construct( $id = 0, $user_login = '', array $roles = array(), array $caps = array() ) {
 			$this->ID         = $id;
 			$this->user_login = $user_login;
-			$this->roles      = $roles;
+
+			// When re-hydrated by ID alone (as the plugin does inside switch_to_blog()
+			// to read another site's roles/caps), pull this blog's roles/caps from the
+			// per-site test globals — mirroring WordPress loading per-site capabilities.
+			if ( '' === $user_login && empty( $roles ) && empty( $caps ) ) {
+				$blog  = $GLOBALS['__force2fa_current_blog_id'] ?? 1;
+				$roles = $GLOBALS['__force2fa_site_roles'][ $blog ][ $id ] ?? array();
+				$caps  = $GLOBALS['__force2fa_site_caps'][ $blog ][ $id ] ?? array();
+			}
+
+			$this->roles = $roles;
+
+			// Faithful-enough default: the 'administrator' role implies
+			// manage_options in WordPress's real role→cap map, so derive it when
+			// no explicit caps are supplied. Tests wanting a different capability
+			// posture pass $caps as a map of cap => true.
+			if ( empty( $caps ) && in_array( 'administrator', $roles, true ) ) {
+				$caps = array( 'manage_options' => true );
+			}
+
+			$this->allcaps = $caps;
+		}
+
+		public function has_cap( $cap ) {
+			return ! empty( $this->allcaps[ $cap ] );
 		}
 	}
+}
+
+// Wordfence Login Security stand-in for the external-2FA integration. has_2fa_active()
+// is driven by $GLOBALS['__force2fa_wordfence_2fa_users'] (a list of user IDs); a test
+// sets __force2fa_wordfence_throw to exercise the fail-safe try/catch. Aliased to the
+// real namespaced class name the plugin looks up.
+if ( ! class_exists( 'WordfenceLS\\Controller_Users' ) ) {
+	class Force2FA_Wordfence_Users_Stub {
+		public static function shared() {
+			static $instance;
+			if ( null === $instance ) {
+				$instance = new self();
+			}
+			return $instance;
+		}
+
+		public function has_2fa_active( $user ) {
+			if ( ! empty( $GLOBALS['__force2fa_wordfence_throw'] ) ) {
+				throw new \RuntimeException( 'Simulated Wordfence integration failure.' );
+			}
+			return in_array( (int) $user->ID, $GLOBALS['__force2fa_wordfence_2fa_users'] ?? array(), true );
+		}
+	}
+	class_alias( 'Force2FA_Wordfence_Users_Stub', 'WordfenceLS\\Controller_Users' );
 }
 
 // Present by default so the enforcement filter takes its append path. The
@@ -266,6 +417,18 @@ if ( ! defined( 'FORCE2FA_TEST_NO_TWO_FACTOR' ) && ! class_exists( 'Two_Factor_C
 
 		public static function get_enabled_providers_for_user( $user_id, array $stored = array() ) {
 			return force_2fa_filter_enabled_providers( $stored, $user_id );
+		}
+
+		// Available (configured + usable) providers, keyed by class name. Driven by a
+		// global a test sets via TestCase::availableProviders(); used by the primary-
+		// provider logic (force_2fa_user_has_real_2fa_method).
+		public static function get_available_providers_for_user( $user ) {
+			$id  = is_object( $user ) ? (int) $user->ID : (int) $user;
+			$out = array();
+			foreach ( $GLOBALS['__force2fa_available_providers'][ $id ] ?? array() as $key ) {
+				$out[ $key ] = new \stdClass();
+			}
+			return $out;
 		}
 
 		public static function get_primary_provider_for_user( $user_id, array $stored = array() ) {

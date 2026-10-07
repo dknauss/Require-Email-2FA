@@ -12,15 +12,20 @@
     <testsuites>
         <testsuite name="unit">
             <file>tests/ExemptTest.php</file>
+            <file>tests/ExternalTwoFactorTest.php</file>
+            <file>tests/PrimaryProviderTest.php</file>
+            <file>tests/MemoizationTest.php</file>
             <file>tests/AllowlistTest.php</file>
             <file>tests/EnabledProvidersFilterTest.php</file>
             <file>tests/ApiLoginFilterTest.php</file>
+            <file>tests/ApiGateTest.php</file>
             <file>tests/DependencyCheckTest.php</file>
             <file>tests/UpdateCheckerAccessorTest.php</file>
             <file>tests/AppPasswordBindingTest.php</file>
             <file>tests/SelfUpdateStatusTest.php</file>
             <file>tests/DependencyNoticeTest.php</file>
             <file>tests/BlockingModeTest.php</file>
+            <file>tests/ScopePromptTest.php</file>
             <!-- Last: uninstall.php runs at include time and defines a constant/function. -->
             <file>tests/UninstallTest.php</file>
         </testsuite>

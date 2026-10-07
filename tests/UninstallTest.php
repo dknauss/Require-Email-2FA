@@ -37,8 +37,13 @@ final class UninstallTest extends TestCase {
 
 		require dirname( __DIR__ ) . '/uninstall.php';
 
-		// The cached-metadata option is deleted, exactly once, by name.
-		$this->assertSame( array( $option_name ), $GLOBALS['__force2fa_deleted_site_options'] );
+		// The updater's cached-metadata option and the enforcement-scope choice are both
+		// purged by name (the scope option is cleared as a network option here; the
+		// single-site delete_option() path does not record).
+		$this->assertSame(
+			array( $option_name, 'force_2fa_enforced_capability' ),
+			$GLOBALS['__force2fa_deleted_site_options']
+		);
 
 		// The update-check cron is cleared once, on the current site (blog 1), and the
 		// get_sites() multisite loop is never entered (no per-site blog switches).
