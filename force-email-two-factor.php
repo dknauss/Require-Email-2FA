@@ -7,7 +7,7 @@
  * Author:           Pixel
  * Author URI:       https://wearepixel.ca
  * Version:          1.14.0
- * Requires at least: 6.8
+ * Requires at least: 7.0
  * Requires PHP:     7.2
  * License:          GPL-2.0-or-later
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
@@ -720,7 +720,7 @@ function force_2fa_user_has_capability( WP_User $user, $capability ) {
 	}
 
 	// Per-site capability check across the user's sites. user_can_for_site() is
-	// guaranteed by the plugin's WordPress 6.8 minimum (it shipped in 6.7).
+	// guaranteed by the plugin's WordPress 7.0 minimum (it shipped in 6.7).
 	// get_blogs_of_user() intentionally omits archived/spam/deleted sites; that is
 	// safe here because those sites block front-end access (deleted ones are gone),
 	// so there is no authenticatable session tied to a privilege held only there.

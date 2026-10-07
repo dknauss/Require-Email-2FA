@@ -1,7 +1,7 @@
 === Require Email 2FA ===
 Contributors: dpknauss
 Tags: two-factor, 2fa, security, authentication, login
-Requires at least: 6.8
+Requires at least: 7.0
 Tested up to: 7.0
 Requires PHP: 7.2
 Stable tag: 1.14.0
@@ -114,10 +114,10 @@ Yes — Two Factor (`two-factor`) provides the Email provider this plugin makes
 mandatory, so nothing is enforced without it. As of 1.8.0 the dependency is no
 longer a hard activation gate. This plugin activates on its own, no-ops while Two
 Factor is inactive, and shows an admin notice with a one-click install/activate
-button. The `Requires at least: 6.8` floor tracks Two Factor's own requirement:
-the current Two Factor release requires WordPress 6.8+, so on older WordPress the
+button. The `Requires at least: 7.0` floor tracks Two Factor's own requirement:
+the current Two Factor release requires WordPress 7.0+, so on older WordPress the
 one-click installer cannot install it and nothing can be enforced. Run WordPress
-6.8 or newer (or install a Two Factor build that supports your WordPress version).
+7.0 or newer (or install a Two Factor build that supports your WordPress version).
 
 = What if email delivery breaks and users are locked out? =
 
@@ -348,6 +348,9 @@ opts those accounts out of this plugin's XML-RPC policy as well.
   held to the allowlist + Application-Password policy. In 1.13.x an excluded role was
   held to the allowlist too; if you relied on that, stop excluding the role, or disable
   XML-RPC.
+* Raised the minimum WordPress version to 7.0, matching Two Factor 0.17.0's own
+  requirement. On older WordPress the one-click installer cannot install Two Factor
+  and nothing is enforced.
 * Self-updates come from `dknauss/Require-Email-2FA`.
 
 = 1.13.2 =
