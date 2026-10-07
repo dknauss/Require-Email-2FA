@@ -3,10 +3,11 @@
  * Plugin Name:      Require Email 2FA
  * Plugin URI:       https://github.com/dknauss/Require-Email-2FA
  * Update URI:       https://github.com/dknauss/Require-Email-2FA
- * Description:      Requires the Two Factor plugin and makes emailed 2FA the default, required login factor for all users.
+ * Description:      Requires the Two Factor plugin and makes emailed 2FA a required login factor for all users (optionally scoped to a capability, e.g. administrators).
  * Author:           Pixel
  * Author URI:       https://wearepixel.ca
- * Version:          1.11.0
+ * Version:          1.14.0
+ * Requires at least: 7.0
  * Requires PHP:     7.2
  * License:          GPL-2.0-or-later
  * License URI:      https://www.gnu.org/licenses/gpl-2.0.html
@@ -111,7 +112,7 @@ if ( defined( 'FORCE_2FA_DISABLE' ) && FORCE_2FA_DISABLE ) {
 if ( defined( 'FORCE_2FA_LOADED' ) ) {
 	return;
 }
-define( 'FORCE_2FA_LOADED', '1.11.0' );
+define( 'FORCE_2FA_LOADED', '1.14.0' );
 // @codeCoverageIgnoreEnd
 
 /**
@@ -351,48 +352,222 @@ function force_2fa_activation_blocked( $is_multisite, $network_wide ) {
 }
 
 /**
- * Roles to EXCLUDE from forced two-factor.
+ * Effective list of role slugs to EXCLUDE from forced two-factor.
  *
- * Default is an empty array → enforcement applies to ALL users. Add role slugs
- * (the lowercase keys, e.g. 'subscriber', 'customer', not display names) to
- * exempt those roles from having Email auto-enabled:
+ * Default is empty → enforcement applies to ALL in-scope users. Add role slugs (the
+ * lowercase keys, e.g. 'subscriber', 'customer', not display names) to exempt those
+ * roles from having Email auto-enabled — set the constant in wp-config.php:
  *
- *     const FORCE_2FA_EXCLUDED_ROLES = array( 'subscriber', 'customer' );
+ *     define( 'FORCE_2FA_EXCLUDED_ROLES', array( 'subscriber', 'customer' ) );
  *
- * Security rule (see force_2fa_user_is_exempt): a user is exempt ONLY if EVERY
- * role they hold is on this list. A user with both an excluded role and a
- * non-excluded one (e.g. subscriber + editor) is still enforced, so excluding a
- * low-privilege role can never accidentally exempt a privileged account that
- * also holds a higher role.
+ * The constant is read with defined() (NOT declared in this file — so, like
+ * FORCE_2FA_DISABLE / FORCE_2FA_ENFORCED_CAPABILITY, defining it in wp-config.php can
+ * never clash with a plugin-side declaration). The 'force_2fa_excluded_roles' filter
+ * overrides the constant and makes the value injectable for unit tests; filters must
+ * be registered from a plugin, a companion mu-plugin, or a theme — NOT wp-config.php,
+ * where add_filter() is not yet loaded.
  *
- * THREAT MODEL / WARNING: exclusions are configured in code (this constant or
- * the force_2fa_user_is_exempt filter), which requires filesystem-level access —
- * a trust level that can already disable 2FA entirely. So exclusions are not an
- * attacker-facing control; they are an operator convenience. There is no hard
- * floor protecting privileged accounts: if you exclude a role that a super admin
- * or administrator holds *as their only role on a site*, that account WILL be
- * exempted on that site. Choose excluded roles deliberately. To exempt or
- * re-include a specific account surgically, prefer the force_2fa_user_is_exempt
- * filter over broad role exclusions.
+ * Security rule (see force_2fa_user_is_exempt): a user is exempt ONLY if EVERY role
+ * they hold is on this list. A user with both an excluded role and a non-excluded one
+ * (e.g. subscriber + editor) is still enforced, so excluding a low-privilege role can
+ * never accidentally exempt a privileged account that also holds a higher role.
  *
- * Exclusion means "don't FORCE 2FA" — it does not forbid it. An excluded user
- * who configured their own 2FA keeps it.
- *
- * @var string[] Role slugs exempt from forced two-factor.
- */
-const FORCE_2FA_EXCLUDED_ROLES = array();
-
-/**
- * Effective list of excluded role slugs.
- *
- * Defaults to the FORCE_2FA_EXCLUDED_ROLES constant; the 'force_2fa_excluded_roles'
- * filter lets code override it at runtime (e.g. environment-specific config) and
- * makes the value injectable for unit tests.
+ * THREAT MODEL / WARNING: exclusions are configured in code (this constant or the
+ * force_2fa_user_is_exempt filter), which requires filesystem-level access — a trust
+ * level that can already disable 2FA entirely. So exclusions are not an attacker-facing
+ * control; they are an operator convenience. There is no hard floor protecting
+ * privileged accounts: if you exclude a role that a super admin or administrator holds
+ * *as their only role on a site*, that account WILL be exempted. Choose excluded roles
+ * deliberately; prefer the force_2fa_user_is_exempt filter to re-include a specific
+ * account surgically. Exclusion means "don't FORCE 2FA" — it does not forbid it; an
+ * excluded user who configured their own 2FA keeps it.
  *
  * @return string[]
  */
 function force_2fa_excluded_roles() {
-	return (array) apply_filters( 'force_2fa_excluded_roles', FORCE_2FA_EXCLUDED_ROLES );
+	$roles = defined( 'FORCE_2FA_EXCLUDED_ROLES' ) ? FORCE_2FA_EXCLUDED_ROLES : array();
+
+	return (array) apply_filters( 'force_2fa_excluded_roles', $roles );
+}
+
+/**
+ * Effective capability that defines the enforcement SCOPE.
+ *
+ * DEFAULT IS '' → the capability gate is OFF and 2FA is forced on EVERY user. This
+ * is the shipped security baseline and is unchanged from earlier versions: the
+ * emailed floor (and, with it, the XML-RPC API-login hardening) covers all accounts,
+ * not just administrators.
+ *
+ * OPT-IN: define FORCE_2FA_ENFORCED_CAPABILITY (or use the filter below) to NARROW
+ * enforcement to users holding that capability. For example, admins-only:
+ *
+ *     // wp-config.php
+ *     define( 'FORCE_2FA_ENFORCED_CAPABILITY', 'manage_options' );
+ *
+ * Any valid capability works — e.g. 'edit_posts' to cover contributors and up. When
+ * set, users who lack the capability are treated as exempt (see
+ * force_2fa_exemption_decision); FORCE_2FA_EXCLUDED_ROLES still applies on top.
+ *
+ * Like every FORCE_2FA_* constant, it is deliberately NOT declared in this file: it is
+ * read with defined() so an operator can define() it in wp-config.php — which loads
+ * first — without a fatal "cannot redeclare constant" error.
+ *
+ * Why a CAPABILITY, not a role slug: capabilities catch super admins and any custom
+ * or plugin-defined role that grants administrative access, whereas a hard-coded
+ * 'administrator' slug would silently miss them. On multisite the check is
+ * network-wide (super admins, or the capability on any of the user's sites), since
+ * WordPress logins are network-wide — see force_2fa_user_has_capability().
+ *
+ * The XML-RPC API-login allowlist is INDEPENDENT of this scope: the plugin's own
+ * authenticate-path gate (force_2fa_gate_api_login) holds every XML-RPC login to the
+ * allowlist + Application-Password policy whether or not the account is in the
+ * enforcement scope. So narrowing this capability never weakens who may log in over
+ * XML-RPC. The one account that passes without the allowlist is one an operator has
+ * explicitly excluded (FORCE_2FA_EXCLUDED_ROLES or the force_2fa_user_is_exempt filter)
+ * — see force_2fa_user_is_explicitly_excluded(). (The allowlist governs XML-RPC, not REST; REST Application-Password logins
+ * bypass the authenticate chain entirely — see the API-login allowlist notes below.)
+ * Like all operator config here, this requires filesystem access and is not an
+ * attacker-facing control.
+ *
+ * @return string Capability name, or '' to enforce on all users (the default).
+ */
+function force_2fa_enforced_capability() {
+	if ( defined( 'FORCE_2FA_ENFORCED_CAPABILITY' ) ) {
+		// Infra-as-code wins: a wp-config constant overrides the activation-time choice.
+		$capability = FORCE_2FA_ENFORCED_CAPABILITY;
+	} else {
+		// The activation prompt stores the operator's choice; unset → the all-users
+		// default. See force_2fa_scope_choice_get() / the scope notice + handler.
+		$stored     = force_2fa_scope_choice_get();
+		$capability = ( null === $stored ) ? '' : $stored;
+	}
+
+	$capability = apply_filters( 'force_2fa_enforced_capability', $capability );
+
+	return is_string( $capability ) ? trim( $capability ) : '';
+}
+
+/**
+ * Option name storing the activation-time enforcement-scope choice.
+ *
+ * Single value; the plugin's only persistent state besides the updater's option.
+ * Written by the scope prompt handler, read as a fallback by
+ * force_2fa_enforced_capability(), cleared on deactivation, and purged by uninstall.php.
+ */
+const FORCE_2FA_SCOPE_OPTION = 'force_2fa_enforced_capability';
+
+/**
+ * The enforcement-scope choices offered by the activation prompt.
+ *
+ * Maps a stored/submitted capability to its label. The keys ARE the capability the
+ * scope resolves to: '' = every user, 'edit_posts' = contributors and up, and
+ * 'manage_options' = administrators (and multisite super admins). This is the closed
+ * set the handler validates against — an option or POST value outside it is ignored.
+ *
+ * @return array<string,string> capability => label.
+ */
+function force_2fa_scope_choices() {
+	return array(
+		''               => __( 'All users (recommended for the strongest coverage)', 'force-email-two-factor' ),
+		'edit_posts'     => __( 'Contributors and up (anyone who can write posts)', 'force-email-two-factor' ),
+		'manage_options' => __( 'Administrators only', 'force-email-two-factor' ),
+	);
+}
+
+/**
+ * The capability pre-selected in the activation prompt.
+ *
+ * Administrators-only is offered as the recommended starting point (smallest rollout
+ * blast radius). Until the operator submits the form, the SECURE default — all users —
+ * still applies (force_2fa_enforced_capability() returns '' while the choice is unset).
+ *
+ * @return string
+ */
+function force_2fa_scope_default_choice() {
+	return 'manage_options';
+}
+
+/**
+ * Coerce a raw scope value to a valid capability choice, or null if invalid.
+ *
+ * Used for both the stored option and the submitted form value, so a corrupted option
+ * or a tampered POST can never inject an arbitrary capability — only the closed set in
+ * force_2fa_scope_choices() is accepted.
+ *
+ * @param mixed $raw Candidate value.
+ * @return string|null A valid capability ('' allowed), or null when not a valid choice.
+ */
+function force_2fa_sanitize_scope_choice( $raw ) {
+	if ( ! is_string( $raw ) ) {
+		return null;
+	}
+
+	return array_key_exists( $raw, force_2fa_scope_choices() ) ? $raw : null;
+}
+
+/**
+ * The stored scope choice, or null when the operator has not chosen yet.
+ *
+ * Network option on multisite (the choice is network-wide), site option otherwise.
+ * A stored value outside the valid set is treated as "not chosen" (null).
+ *
+ * @return string|null Valid capability, or null when unset/invalid.
+ */
+function force_2fa_scope_choice_get() {
+	$value = is_multisite()
+		? get_site_option( FORCE_2FA_SCOPE_OPTION, null )
+		: get_option( FORCE_2FA_SCOPE_OPTION, null );
+
+	if ( null === $value ) {
+		return null; // Never chosen.
+	}
+
+	return force_2fa_sanitize_scope_choice( $value );
+}
+
+/**
+ * Persist the operator's scope choice ($capability must be pre-validated).
+ *
+ * @param string $capability One of the force_2fa_scope_choices() keys.
+ * @return void
+ */
+function force_2fa_scope_choice_set( $capability ) {
+	if ( is_multisite() ) {
+		update_site_option( FORCE_2FA_SCOPE_OPTION, $capability );
+	} else {
+		update_option( FORCE_2FA_SCOPE_OPTION, $capability );
+	}
+}
+
+/**
+ * Clear the stored scope choice (single + network), so the prompt shows again.
+ *
+ * Registered on deactivation: the choice is an activation-time decision, so
+ * deactivating and reactivating re-prompts — the intended "start over" path. Clears
+ * both storage locations defensively.
+ *
+ * @return void
+ */
+function force_2fa_clear_scope_choice() {
+	delete_option( FORCE_2FA_SCOPE_OPTION );
+	delete_site_option( FORCE_2FA_SCOPE_OPTION );
+}
+
+/**
+ * Pure decision: whether to show the activation-time scope prompt.
+ *
+ * Shown only when the scope has NOT been pinned in code (a wp-config constant means the
+ * operator manages it there — no prompt), the choice has not yet been stored, and the
+ * current user can act on it. Independent of Two Factor's state, so the choice is
+ * captured even when Two Factor is already active (no dependency notice to piggyback).
+ *
+ * @param bool $constant_defined Whether FORCE_2FA_ENFORCED_CAPABILITY is defined.
+ * @param bool $choice_stored    Whether a scope choice has been saved.
+ * @param bool $user_can_manage  Whether the current user may set the scope.
+ * @return bool
+ */
+function force_2fa_should_prompt_scope( $constant_defined, $choice_stored, $user_can_manage ) {
+	return ! $constant_defined && ! $choice_stored && (bool) $user_can_manage;
 }
 
 /**
@@ -464,27 +639,324 @@ function force_2fa_normalize_string_list( $values ) {
 }
 
 /**
+ * Pure exemption decision from explicit inputs (no WordPress calls).
+ *
+ * Two independent exemptions, checked in order:
+ *
+ *   1. Capability scope (opt-in). If an enforced capability is configured
+ *      (non-empty) and the user does NOT hold it, they are out of scope → exempt.
+ *      An empty $enforced_capability (the default) disables this gate (enforce on
+ *      everyone).
+ *   2. Role denylist. Among in-scope users, a user is exempt only if they have at
+ *      least one role AND every role they hold is on the excluded list. Users with
+ *      no role are never exempted here (fail secure), and a user holding both an
+ *      excluded and a non-excluded role stays enforced.
+ *
+ * @param string[] $roles               Normalized (lowercased) role slugs the user holds.
+ * @param string[] $excluded_roles      Normalized (lowercased) excluded role slugs.
+ * @param string   $enforced_capability Capability defining scope; '' disables the gate.
+ * @param bool     $user_has_capability Whether the user holds $enforced_capability.
+ * @return bool True if forced 2FA should be skipped for this user.
+ */
+function force_2fa_exemption_decision( array $roles, array $excluded_roles, $enforced_capability, $user_has_capability ) {
+	// Capability scope: users outside the enforced capability are exempt.
+	if ( '' !== (string) $enforced_capability && ! $user_has_capability ) {
+		return true;
+	}
+
+	// Role denylist carve-out among in-scope users.
+	return force_2fa_roles_all_excluded( $roles, $excluded_roles );
+}
+
+/**
+ * Pure role-denylist decision: whether every role a user holds is excluded.
+ *
+ * True only if the user has at least one role AND every role they hold is on the
+ * excluded list. A user with no role is never excluded (fail secure), and a user
+ * holding both an excluded and a non-excluded role is not excluded.
+ *
+ * @param string[] $roles          Normalized (lowercased) role slugs the user holds.
+ * @param string[] $excluded_roles Normalized (lowercased) excluded role slugs.
+ * @return bool True if the user is carved out by the role denylist.
+ */
+function force_2fa_roles_all_excluded( array $roles, array $excluded_roles ) {
+	return ! empty( $roles )
+		&& ! empty( $excluded_roles )
+		&& empty( array_diff( $roles, $excluded_roles ) );
+}
+
+/**
+ * Whether $user is in the enforcement scope for $capability (network-aware).
+ *
+ * Single site: a straight capability check.
+ *
+ * Multisite: WordPress authentication is NETWORK-WIDE (the logged-in cookie spans the
+ * network), and this plugin is network-only, so scope must be network-wide too. A
+ * per-current-site check would be a bypass: an administrator of subsite B could log
+ * in through subsite A — where they hold only a low role — and skip enforcement for
+ * their whole network-global account, session included. So on multisite a user is in
+ * scope when EITHER:
+ *
+ *   - they are a super admin (the highest-value accounts; always in scope), OR
+ *   - they hold the capability on ANY site they belong to (not just the current one).
+ *
+ * An empty capability means "no gate" → everyone qualifies.
+ *
+ * @param WP_User $user       The resolved user.
+ * @param string  $capability Capability defining scope; '' means "no gate".
+ * @return bool True if the user is in the enforcement scope.
+ */
+function force_2fa_user_has_capability( WP_User $user, $capability ) {
+	if ( '' === (string) $capability ) {
+		return true;
+	}
+
+	if ( ! is_multisite() ) {
+		return (bool) user_can( $user, $capability );
+	}
+
+	if ( is_super_admin( $user->ID ) ) {
+		return true;
+	}
+
+	// Per-site capability check across the user's sites. user_can_for_site() is
+	// guaranteed by the plugin's WordPress 7.0 minimum (it shipped in 6.7).
+	// get_blogs_of_user() intentionally omits archived/spam/deleted sites; that is
+	// safe here because those sites block front-end access (deleted ones are gone),
+	// so there is no authenticatable session tied to a privilege held only there.
+	foreach ( get_blogs_of_user( $user->ID ) as $blog ) {
+		if ( user_can_for_site( $user, (int) $blog->userblog_id, $capability ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * The union of a user's roles across the sites they belong to.
+ *
+ * Single site: just the user's roles. Multisite: the roles the user holds on EVERY
+ * site they are a member of, unioned. This keeps the FORCE_2FA_EXCLUDED_ROLES
+ * carve-out network-safe — a user who is low-privilege on the site they log in through
+ * but holds a non-excluded role on another network site is NOT exempted, because
+ * WordPress logins are network-wide and a session opened on one site is usable on the
+ * others. Evaluating only the login site's roles would re-open the same cross-site
+ * bypass the network-wide capability check (force_2fa_user_has_capability) closes.
+ *
+ * @param WP_User $user The resolved user.
+ * @return string[] Role slugs held anywhere in the network.
+ */
+function force_2fa_user_network_roles( WP_User $user ) {
+	if ( ! is_multisite() ) {
+		return (array) $user->roles;
+	}
+
+	// get_blogs_of_user() omits archived/spam/deleted sites — safe here for the same
+	// reason as in force_2fa_user_has_capability(): no live session can be tied to a
+	// role held only on a site that blocks access.
+	$roles = (array) $user->roles;
+	foreach ( get_blogs_of_user( $user->ID ) as $blog ) {
+		$roles = array_merge( $roles, force_2fa_user_roles_on_site( $user->ID, (int) $blog->userblog_id ) );
+	}
+
+	return array_values( array_unique( $roles ) );
+}
+
+/**
+ * A user's roles on a specific site.
+ *
+ * Re-hydrates the user in the target site's context so the returned roles reflect that
+ * site; a WP_User already loaded for another site would report the wrong roles.
+ *
+ * @param int $user_id The user ID.
+ * @param int $site_id Target site (blog) ID.
+ * @return string[]
+ */
+function force_2fa_user_roles_on_site( $user_id, $site_id ) {
+	$switched = get_current_blog_id() !== (int) $site_id;
+	if ( $switched ) {
+		switch_to_blog( (int) $site_id );
+	}
+
+	$scoped = new WP_User( (int) $user_id );
+	$roles  = (array) $scoped->roles;
+
+	if ( $switched ) {
+		restore_current_blog();
+	}
+
+	return $roles;
+}
+
+/**
+ * Whether Wordfence Login Security reports active 2FA for a user.
+ *
+ * Called from force_2fa_compute_exemption() so a user whose 2FA is handled by Wordfence
+ * is exempt from this plugin's emailed floor — nobody is driven through two 2FA plugins
+ * at once (even though Wordfence offers no email method, the failure/confusion modes of
+ * two 2FA systems are not predictable). Wordfence is the only bundled integration; to
+ * exempt users protected by some OTHER external system, use the 'force_2fa_user_is_exempt'
+ * filter. Detected defensively so Wordfence being absent, inactive, or changed never
+ * causes a fatal — on any integration error, return false so the email floor stays.
+ *
+ * @param WP_User $user The resolved user.
+ * @return bool True when Wordfence reports active 2FA for the user.
+ */
+function force_2fa_wordfence_2fa_active( WP_User $user ) {
+	$controller_class = 'WordfenceLS\\Controller_Users';
+
+	if ( ! class_exists( $controller_class ) || ! is_callable( array( $controller_class, 'shared' ) ) ) {
+		return false;
+	}
+
+	try {
+		$controller = call_user_func( array( $controller_class, 'shared' ) );
+		if ( ! is_object( $controller ) || ! is_callable( array( $controller, 'has_2fa_active' ) ) ) {
+			return false;
+		}
+
+		return (bool) call_user_func( array( $controller, 'has_2fa_active' ), $user );
+	} catch ( Throwable $exception ) {
+		// A third-party integration failure must not disable this plugin's floor.
+		return false;
+	}
+}
+
+/**
+ * The computed (pre-filter) exemption for a user — memoized per request.
+ *
+ * This is the expensive half: on multisite it can iterate the user's sites (once in
+ * force_2fa_user_has_capability(), once in force_2fa_user_network_roles()), each with
+ * a switch_to_blog()/user load. Two Factor may call the enabled-providers filter
+ * several times per request, and blocking mode evaluates it again, so the result is
+ * cached per (user, current site) for the remainder of the request.
+ *
+ * Correctness: the value only depends on the user's network-wide roles/capabilities
+ * and the (request-stable) FORCE_2FA_* config, so a per-request cache is safe. It is
+ * also flushed per user on 'clean_user_cache' (force_2fa_flush_exemption_cache),
+ * which WordPress fires when a user's cached data is invalidated (role/membership
+ * changes), so a mid-request mutation is picked up too. The cache is keyed on the
+ * current site as well: our own computation is network-wide (site-independent), but
+ * keying on the site keeps the memo correct if that ever changes.
+ *
+ * @param WP_User $user The resolved user.
+ * @return bool True if forced 2FA should be skipped for this user (before the filter).
+ */
+function force_2fa_compute_exemption( WP_User $user ) {
+	$user_id = (int) $user->ID;
+	$blog_id = (int) get_current_blog_id();
+
+	if ( isset( $GLOBALS['force_2fa_exempt_cache'][ $user_id ][ $blog_id ] ) ) {
+		return $GLOBALS['force_2fa_exempt_cache'][ $user_id ][ $blog_id ];
+	}
+
+	$enforced_capability = force_2fa_enforced_capability();
+	$has_capability      = force_2fa_user_has_capability( $user, $enforced_capability );
+	$excluded_roles      = force_2fa_normalize_string_list( force_2fa_excluded_roles() );
+
+	// Gather roles network-wide only when a denylist exists: with no excluded roles the
+	// role branch can never exempt anyone, so the (possibly multi-site) lookup is
+	// pointless work. This keeps the common no-exclusions case as cheap as before.
+	$roles = empty( $excluded_roles )
+		? array()
+		: force_2fa_normalize_string_list( force_2fa_user_network_roles( $user ) );
+
+	$exempt = force_2fa_exemption_decision(
+		$roles,
+		$excluded_roles,
+		$enforced_capability,
+		$has_capability
+	);
+
+	// Also exempt when the user's 2FA is handled by Wordfence Login Security: don't ALSO
+	// supply the Two Factor email floor, so a user is never driven through two different
+	// 2FA plugins at once. Memoized with the rest. (Other external systems: exempt those
+	// users via the 'force_2fa_user_is_exempt' filter.)
+	if ( ! $exempt && force_2fa_wordfence_2fa_active( $user ) ) {
+		$exempt = true;
+	}
+
+	$GLOBALS['force_2fa_exempt_cache'][ $user_id ][ $blog_id ] = $exempt;
+
+	return $exempt;
+}
+
+/**
+ * Flush the per-request exemption memo.
+ *
+ * Hooked to 'clean_user_cache' (which passes the affected user ID) so a user's cached
+ * decision is dropped whenever WordPress invalidates their user cache — e.g. a role or
+ * site-membership change. With no argument, clears the whole memo.
+ *
+ * @param int|WP_User $user_id Affected user ID (or user); 0/empty clears everything.
+ * @return void
+ */
+function force_2fa_flush_exemption_cache( $user_id = 0 ) {
+	if ( $user_id instanceof WP_User ) {
+		$user_id = $user_id->ID;
+	}
+
+	if ( $user_id ) {
+		unset( $GLOBALS['force_2fa_exempt_cache'][ (int) $user_id ] );
+		return;
+	}
+
+	$GLOBALS['force_2fa_exempt_cache'] = array();
+}
+
+/**
+ * Whether an operator has EXPLICITLY excluded a user, as distinct from the user merely
+ * falling outside the enforced-capability scope.
+ *
+ * The XML-RPC API-login gate needs this distinction. Excluding a role (or an account,
+ * through the 'force_2fa_user_is_exempt' filter) is a deliberate statement that this
+ * plugin's policy does not apply to that account, and the API-login gate honors it.
+ * Narrowing FORCE_2FA_ENFORCED_CAPABILITY is not: it says who must use 2FA at the
+ * login screen, and must never widen who may log in over XML-RPC. So an account that
+ * is exempt ONLY because it is out of scope, or because Wordfence handles its 2FA, is
+ * not excluded here and stays held to the allowlist.
+ *
+ * Roles are evaluated network-wide on multisite, exactly as the exemption is. The
+ * 'force_2fa_user_is_exempt' filter is applied to the role-denylist result, so a
+ * filter that exempts a specific account excludes it here too, and one that re-includes
+ * an account keeps it held.
+ *
+ * @param WP_User $user The resolved user.
+ * @return bool True if the account is explicitly excluded from this plugin's policy.
+ */
+function force_2fa_user_is_explicitly_excluded( WP_User $user ) {
+	$excluded_roles = force_2fa_normalize_string_list( force_2fa_excluded_roles() );
+
+	$excluded = ! empty( $excluded_roles ) && force_2fa_roles_all_excluded(
+		force_2fa_normalize_string_list( force_2fa_user_network_roles( $user ) ),
+		$excluded_roles
+	);
+
+	/** This filter is documented in force_2fa_user_is_exempt(). */
+	return (bool) apply_filters( 'force_2fa_user_is_exempt', $excluded, $user );
+}
+
+/**
  * Whether a user is exempt from forced two-factor.
  *
- * Exempt only when the user has at least one role AND all of their roles are in
- * the excluded list. Users with no role are never exempted (fail secure). The
- * 'force_2fa_user_is_exempt' filter allows programmatic overrides for edge cases
- * (e.g. a specific user ID) without editing the role list.
+ * Glue: takes the memoized computation (capability scope + excluded roles, evaluated
+ * network-wide on multisite — see force_2fa_compute_exemption) and always applies the
+ * 'force_2fa_user_is_exempt' filter so programmatic overrides stay dynamic per call.
+ * By default the enforced capability is '' (no gate), so EVERY user is in scope;
+ * defining FORCE_2FA_ENFORCED_CAPABILITY narrows enforcement (e.g. admins-only), and
+ * FORCE_2FA_EXCLUDED_ROLES further carves out roles among in-scope users.
  *
  * @param WP_User $user The resolved user.
  * @return bool True if forced 2FA should be skipped for this user.
  */
 function force_2fa_user_is_exempt( WP_User $user ) {
-	$excluded = force_2fa_normalize_string_list( force_2fa_excluded_roles() );
-	$roles    = force_2fa_normalize_string_list( $user->roles );
-	$exempt   = ! empty( $roles )
-		&& ! empty( $excluded )
-		&& empty( array_diff( $roles, $excluded ) );
+	$exempt = force_2fa_compute_exemption( $user );
 
 	/**
 	 * Filter the per-user exemption from forced two-factor.
 	 *
-	 * @param bool    $exempt Whether the user is exempt based on roles.
+	 * @param bool    $exempt Whether the user is exempt (capability scope, excluded roles, or external 2FA).
 	 * @param WP_User $user   The user being evaluated.
 	 */
 	return (bool) apply_filters( 'force_2fa_user_is_exempt', $exempt, $user );
@@ -492,13 +964,14 @@ function force_2fa_user_is_exempt( WP_User $user ) {
 
 /**
  * Make two-factor mandatory by ensuring the Email provider is enabled for every
- * user (except excluded roles — see FORCE_2FA_EXCLUDED_ROLES).
+ * in-scope user (by default ALL users; see FORCE_2FA_EXCLUDED_ROLES and the opt-in
+ * FORCE_2FA_ENFORCED_CAPABILITY for how scope and exemptions are determined).
  *
  * Why this works: the Two Factor plugin treats a user as "using 2FA" whenever
  * they have at least one available provider. Two_Factor_Email::is_available_for_user()
  * returns true unconditionally and needs no per-user setup (it just mails a code
  * to the account address), so adding it as a floor forces the login challenge
- * for everyone — including users who never configured anything.
+ * for every user it is applied to — including those who never configured anything.
  *
  * Why APPEND (not replace): returning array( 'Two_Factor_Email' ) would strip
  * each user's stronger factors (TOTP, hardware keys) AND their backup codes on
@@ -544,6 +1017,109 @@ function force_2fa_filter_enabled_providers( $enabled_providers, $user_id ) {
 }
 
 /**
+ * The first available Two Factor provider that counts as a REAL primary method —
+ * available, and neither Email nor Backup Codes — or null if the user has none.
+ *
+ * "Real" EXCLUDES Email (the floor we add), Backup Codes (a finite recovery mechanism,
+ * not a primary interactive factor — so a backup-codes-only user is treated as having no
+ * real method, and the emailed floor becomes their primary), and Two_Factor_Dummy (Two
+ * Factor's debug-only provider, whose validate_authentication() returns true
+ * unconditionally — treating it as real would let it become primary and bypass the
+ * mandatory email challenge). "First" follows Two Factor's own available-provider order.
+ * Uses get_available_providers_for_user(); safe from recursion — that calls the
+ * enabled-providers filter this plugin hooks, which never calls the primary-provider
+ * filter. Any integration error returns null so Email can serve as primary.
+ *
+ * @param WP_User $user The resolved user.
+ * @return string|null Provider class-name key, or null when no real method is available.
+ */
+function force_2fa_first_real_2fa_method( WP_User $user ) {
+	$core_class = 'Two_Factor_Core';
+	if ( ! is_callable( array( $core_class, 'get_available_providers_for_user' ) ) ) {
+		return null;
+	}
+
+	try {
+		$available = call_user_func( array( $core_class, 'get_available_providers_for_user' ), $user );
+	} catch ( Throwable $exception ) {
+		return null;
+	}
+
+	if ( ! is_array( $available ) ) {
+		return null; // WP_Error or unexpected → no usable real method.
+	}
+
+	foreach ( $available as $provider_key => $provider ) {
+		if ( force_2fa_is_real_2fa_provider_key( $provider_key ) ) {
+			return $provider_key;
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Whether a provider key counts as a REAL primary 2FA method.
+ *
+ * Excludes the emailed floor this plugin supplies (Two_Factor_Email), Backup Codes (a
+ * finite recovery mechanism), and Two_Factor_Dummy (Two Factor's debug provider, whose
+ * validate_authentication() returns true unconditionally — it must never be treated as
+ * real, or it could become primary and bypass the mandatory email challenge). Kept as a
+ * single source of truth so force_2fa_first_real_2fa_method() and
+ * force_2fa_filter_primary_provider() can never drift apart.
+ *
+ * @param mixed $provider_key A provider class-name key.
+ * @return bool
+ */
+function force_2fa_is_real_2fa_provider_key( $provider_key ) {
+	return is_string( $provider_key )
+		&& 'Two_Factor_Email' !== $provider_key
+		&& 'Two_Factor_Backup_Codes' !== $provider_key
+		&& 'Two_Factor_Dummy' !== $provider_key;
+}
+
+/**
+ * Keep the emailed floor from becoming PRIMARY over a real method, and make it primary
+ * only when the user has no real method (no method, or backup-codes-only).
+ *
+ * Hooked to Two Factor's 'two_factor_primary_provider_for_user'. Two Factor resolves the
+ * primary from the user's stored selection or the first available provider — and Email
+ * sorts first in its registration order, so an appended Email floor can otherwise become
+ * primary over TOTP/WebAuthn for a user with no stored selection, while a
+ * backup-codes-only user keeps Backup Codes as primary. Policy: a real method always
+ * outranks the email floor for primary. So if the resolved primary is already a real
+ * method, keep it; if it is Email or Backup Codes, switch to the first available real
+ * method when one exists, otherwise the emailed floor is primary. Runs only when the
+ * plugin is actually flooring Email for this user (dependency met, in scope, not exempt).
+ * The user's stored primary meta is never mutated — this only affects runtime selection.
+ *
+ * @param string $provider The provider key Two Factor resolved as primary.
+ * @param int    $user_id  The user ID.
+ * @return string The provider key to use as primary.
+ */
+function force_2fa_filter_primary_provider( $provider, $user_id ) {
+	if ( ! force_2fa_dependency_met() ) {
+		return $provider;
+	}
+
+	$user = get_userdata( (int) $user_id );
+	if ( ! $user instanceof WP_User || force_2fa_user_is_exempt( $user ) ) {
+		return $provider; // This plugin is not supplying Email for this user.
+	}
+
+	// A real method is already primary → leave it.
+	if ( force_2fa_is_real_2fa_provider_key( $provider ) ) {
+		return $provider;
+	}
+
+	// Resolved primary is Email / Backup Codes / Dummy: prefer a real method if one is
+	// available, otherwise the emailed floor is the sole meaningful method → primary.
+	$real = force_2fa_first_real_2fa_method( $user );
+
+	return null !== $real ? $real : 'Two_Factor_Email';
+}
+
+/**
  * Service-account allowlist for non-interactive API logins.
  *
  * Background — what the API-login path is and how the plugin already guards it:
@@ -568,8 +1144,8 @@ function force_2fa_filter_enabled_providers( $enabled_providers, $user_id ) {
  * Zapier/Make/n8n — are NOT governed by this allowlist; see SCOPE below.)
  *
  * The resulting policy is one of two paths (see filter below):
- *   - an explicitly exempt account is allowed through unchanged; or
- *   - a non-exempt account must satisfy BOTH (a) allowlist membership and (b) an
+ *   - an explicitly excluded account is allowed through unchanged; or
+ *   - any other account must satisfy BOTH (a) allowlist membership and (b) an
  *     Application Password authenticating that same account in THIS request.
  * So an allowlisted account that tries its real login password over the API is
  * still denied, and a non-allowlisted account is denied even with an app password.
@@ -601,26 +1177,23 @@ function force_2fa_filter_enabled_providers( $enabled_providers, $user_id ) {
  *   2. It has the least-privilege role the integration actually needs.
  *   3. You remove it from this list the moment the integration is retired.
  *
- * Leave the array EMPTY to deny ALL API logins (no service accounts permitted).
+ * Leave the array EMPTY (the default) to deny ALL API logins (no service accounts
+ * permitted). Set it in wp-config.php:
  *
- * @var array<int|string> User IDs and/or user_login values permitted on the API path.
- */
-const FORCE_2FA_API_LOGIN_ALLOWLIST = array(
-	// 123,            // by user ID (preferred — stable across login renames)
-	// 'svc_headless', // by user_login (case-insensitive)
-);
-
-/**
- * Effective API-login allowlist.
+ *     define( 'FORCE_2FA_API_LOGIN_ALLOWLIST', array( 123, 'svc_headless' ) );
  *
- * Defaults to the FORCE_2FA_API_LOGIN_ALLOWLIST constant; the
- * 'force_2fa_api_login_allowlist' filter lets code override it at runtime and
- * makes the value injectable for unit tests.
+ * The constant is read with defined() (NOT declared in this file — so, like the other
+ * FORCE_2FA_* constants, defining it in wp-config.php can never clash with a plugin-side
+ * declaration). The 'force_2fa_api_login_allowlist' filter overrides the constant;
+ * register it from a plugin, a companion mu-plugin, or a theme — NOT wp-config.php,
+ * where add_filter() is not yet loaded.
  *
- * @return array<int|string>
+ * @return array<int|string> User IDs and/or user_login values permitted on the API path.
  */
 function force_2fa_api_login_allowlist() {
-	return (array) apply_filters( 'force_2fa_api_login_allowlist', FORCE_2FA_API_LOGIN_ALLOWLIST );
+	$allowlist = defined( 'FORCE_2FA_API_LOGIN_ALLOWLIST' ) ? FORCE_2FA_API_LOGIN_ALLOWLIST : array();
+
+	return (array) apply_filters( 'force_2fa_api_login_allowlist', $allowlist );
 }
 
 /**
@@ -712,12 +1285,12 @@ function force_2fa_filter_api_login_enable( $enable, $user ) {
 		return false; // Unknown user → deny the API bypass.
 	}
 
-	// Exemptions mean "do not force 2FA," including this plugin's API-login gate. This is
-	// deliberately checked before the Application Password requirement: an operator who
-	// excludes a role or account has opted that account out of this plugin's API policy as
-	// well. If the account has no enabled provider, Two Factor never reaches this filter;
-	// if it has its own provider, this lets the exclusion remain coherent.
-	if ( force_2fa_user_is_exempt( $user ) ) {
+	// An explicit exclusion means "this plugin's policy does not apply," including its
+	// API-login gate. This is deliberately checked before the Application Password
+	// requirement: an operator who excludes a role or account has opted that account out
+	// of this plugin's API policy as well. Being merely outside the enforced-capability
+	// scope is NOT an exclusion — see force_2fa_user_is_explicitly_excluded().
+	if ( force_2fa_user_is_explicitly_excluded( $user ) ) {
 		return true;
 	}
 
@@ -731,6 +1304,96 @@ function force_2fa_filter_api_login_enable( $enable, $user ) {
 
 	// (a) ...and only for named service accounts.
 	return force_2fa_user_is_api_allowlisted( $user );
+}
+
+/**
+ * Pure decision: whether an XML-RPC login must be DENIED by the API-login gate.
+ *
+ * The allowlist policy is INDEPENDENT of the interactive-2FA enforcement scope: an
+ * XML-RPC login is permitted only for an allowlisted account that authenticated with an
+ * Application Password, whether or not the account is in the
+ * FORCE_2FA_ENFORCED_CAPABILITY scope. So narrowing 2FA enforcement can never widen who
+ * may log in over XML-RPC.
+ *
+ * The one exception is an account the operator has EXPLICITLY excluded
+ * (FORCE_2FA_EXCLUDED_ROLES, or the force_2fa_user_is_exempt filter): an exclusion opts
+ * the account out of this plugin's policy, the API-login gate included. Being merely
+ * out of the capability scope is not an exclusion.
+ *
+ * Returns false (do NOT deny — pass the login through unchanged) when the gate does not
+ * apply: not an XML-RPC request, Two Factor inactive (the plugin's soft-dependency
+ * no-op), core did not authenticate a user (let the existing error stand), or the
+ * account is explicitly excluded. Otherwise deny unless the account is allowlisted AND
+ * used an Application Password this request.
+ *
+ * @param bool $is_xmlrpc              Whether this is an XML-RPC request (XMLRPC_REQUEST).
+ * @param bool $dependency_met         Whether Two Factor is active (force_2fa_dependency_met()).
+ * @param bool $has_authenticated_user Whether core resolved a WP_User (vs error/anonymous).
+ * @param bool $used_app_password      Whether THIS user authenticated via Application Password.
+ * @param bool $is_allowlisted         Whether the user is on the API-login allowlist.
+ * @param bool $is_excluded            Whether the operator explicitly excluded the account.
+ * @return bool True if the login must be denied.
+ */
+function force_2fa_api_login_should_deny( $is_xmlrpc, $dependency_met, $has_authenticated_user, $used_app_password, $is_allowlisted, $is_excluded = false ) {
+	if ( ! $is_xmlrpc || ! $dependency_met || ! $has_authenticated_user || $is_excluded ) {
+		return false;
+	}
+
+	return ! ( $used_app_password && $is_allowlisted );
+}
+
+/**
+ * Gate the XML-RPC authenticate path to the service-account allowlist.
+ *
+ * Hooked to 'authenticate' at a late priority (after core has resolved the user). This
+ * is what decouples the API-login hardening from the interactive-2FA scope: Two Factor's
+ * own 'two_factor_user_api_login_enable' gate only runs for users it considers "using
+ * 2FA", so a user out of the enforcement scope would otherwise slip past the allowlist.
+ * This gate applies the same allowlist + Application-Password policy to every XML-RPC
+ * login, in scope or not, and passes only an explicitly excluded account through. (The
+ * 'two_factor_user_api_login_enable' filter is kept as-is — for in-scope users it
+ * expresses the identical decision inside Two Factor's flow; this gate extends that
+ * coverage to everyone. The two only ever ADD denials; they never loosen.)
+ *
+ * Deliberately scoped to XML-RPC only: interactive logins (no XMLRPC_REQUEST) fall
+ * through to the normal 2FA challenge, and REST Application-Password logins authenticate
+ * via core's 'determine_current_user' path and never reach 'authenticate' — so, as
+ * documented, this does not gate REST. Preserves the soft dependency: no-ops when Two
+ * Factor is inactive.
+ *
+ * @param WP_User|WP_Error|null $user     The user core authenticated (or an error).
+ * @param string                $username Unused.
+ * @param string                $password Unused.
+ * @return WP_User|WP_Error|null The user unchanged, or a WP_Error denying the login.
+ */
+function force_2fa_gate_api_login( $user, $username = '', $password = '' ) {
+	unset( $username, $password );
+
+	$has_user          = $user instanceof WP_User;
+	$app_password_user = force_2fa_app_password_user_id();
+	$used_app_password = $has_user && $app_password_user > 0 && (int) $user->ID === $app_password_user;
+	$is_xmlrpc         = defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST;
+	$is_allowlisted    = $has_user && force_2fa_user_is_api_allowlisted( $user );
+	// Resolved only on the XML-RPC path: on multisite it can walk the user's sites.
+	$is_excluded = $is_xmlrpc && $has_user && force_2fa_user_is_explicitly_excluded( $user );
+
+	$deny = force_2fa_api_login_should_deny(
+		$is_xmlrpc,
+		force_2fa_dependency_met(),
+		$has_user,
+		$used_app_password,
+		$is_allowlisted,
+		$is_excluded
+	);
+
+	if ( $deny ) {
+		return new WP_Error(
+			'force_2fa_api_login_denied',
+			__( 'XML-RPC logins are restricted to allowlisted service accounts authenticating with an Application Password.', 'force-email-two-factor' )
+		);
+	}
+
+	return $user;
 }
 
 /**
@@ -1315,6 +1978,96 @@ function force_2fa_handle_install_two_factor() {
 // @codeCoverageIgnoreEnd
 
 /**
+ * Capability required to set the enforcement scope from the activation prompt.
+ *
+ * @return string
+ */
+function force_2fa_scope_manage_capability() {
+	return is_multisite() ? 'manage_network_options' : 'manage_options';
+}
+
+// @codeCoverageIgnoreStart
+// WP-glue: the first-run scope prompt (notice HTML) and its admin-post handler
+// (nonce/capability/redirect). The decisions they rely on — force_2fa_should_prompt_scope(),
+// force_2fa_sanitize_scope_choice(), the option get/set/clear — are unit-tested; this
+// rendering + request handling is exercised by the real-WordPress E2E.
+
+/**
+ * First-run notice: let an operator scope enforcement at activation time.
+ *
+ * Shown on the admin (and network admin) until a choice is stored or
+ * FORCE_2FA_ENFORCED_CAPABILITY is defined in code. Until a choice is made the SECURE
+ * default (all users) applies — and the default floor only adds the email challenge, it
+ * does not block anyone — so there is no lockout window. Submitting posts to
+ * force_2fa_handle_set_scope() via admin-post.php.
+ *
+ * @return void
+ */
+function force_2fa_scope_notice() {
+	if ( ! force_2fa_should_prompt_scope(
+		defined( 'FORCE_2FA_ENFORCED_CAPABILITY' ),
+		null !== force_2fa_scope_choice_get(),
+		current_user_can( force_2fa_scope_manage_capability() )
+	) ) {
+		return;
+	}
+
+	$action   = 'force_2fa_set_scope';
+	$post_url = is_multisite() ? network_admin_url( 'admin-post.php' ) : admin_url( 'admin-post.php' );
+	$default  = force_2fa_scope_default_choice();
+
+	echo '<div class="notice notice-warning force-2fa-scope-notice"><p><strong>';
+	echo esc_html__( 'Require Email 2FA: choose who must use two-factor.', 'force-email-two-factor' );
+	echo '</strong> ';
+	echo esc_html__( 'Until you choose, two-factor is required for all users. Narrow it below if you would rather start with a smaller group — you can change this later by deactivating and reactivating the plugin.', 'force-email-two-factor' );
+	echo '</p>';
+
+	echo '<form method="post" action="' . esc_url( $post_url ) . '">';
+	echo '<input type="hidden" name="action" value="' . esc_attr( $action ) . '" />';
+	wp_nonce_field( $action );
+
+	echo '<p>';
+	foreach ( force_2fa_scope_choices() as $capability => $label ) {
+		printf(
+			'<label style="margin-right:1.5em;"><input type="radio" name="force_2fa_scope" value="%1$s" %2$s /> %3$s</label>',
+			esc_attr( $capability ),
+			checked( $capability, $default, false ),
+			esc_html( $label )
+		);
+	}
+	echo '</p>';
+
+	echo '<p><button type="submit" class="button button-primary">';
+	echo esc_html__( 'Save enforcement scope', 'force-email-two-factor' );
+	echo '</button></p></form></div>';
+}
+
+/**
+ * Handle the scope-prompt submission: validate nonce + capability, store, redirect.
+ *
+ * @return void
+ */
+function force_2fa_handle_set_scope() {
+	if ( ! current_user_can( force_2fa_scope_manage_capability() ) ) {
+		wp_die( esc_html__( 'You do not have permission to set the two-factor enforcement scope.', 'force-email-two-factor' ) );
+	}
+
+	check_admin_referer( 'force_2fa_set_scope' );
+
+	$raw    = isset( $_POST['force_2fa_scope'] ) ? sanitize_text_field( wp_unslash( $_POST['force_2fa_scope'] ) ) : '';
+	$choice = force_2fa_sanitize_scope_choice( $raw );
+	if ( null === $choice ) {
+		$choice = ''; // Unrecognised submission → the secure default (all users).
+	}
+
+	force_2fa_scope_choice_set( $choice );
+
+	wp_safe_redirect( is_multisite() ? network_admin_url() : admin_url() );
+	exit;
+}
+// @codeCoverageIgnoreEnd
+
+/**
  * Keep the dependency notice honest when Two Factor is deleted via the AJAX "Delete".
  *
  * WordPress deletes plugins over AJAX without reloading the page, so the
@@ -1678,11 +2431,23 @@ function force_2fa_site_health_self_update() {
  */
 function force_2fa_register_hooks() {
 	add_filter( 'two_factor_enabled_providers_for_user', 'force_2fa_filter_enabled_providers', 10, 2 );
+	add_filter( 'two_factor_primary_provider_for_user', 'force_2fa_filter_primary_provider', 10, 2 );
 	add_filter( 'two_factor_user_api_login_enable', 'force_2fa_filter_api_login_enable', 10, 2 );
+
+	// Own gate on the authenticate path so the XML-RPC allowlist applies to ALL users,
+	// independent of the interactive-2FA enforcement scope (Two Factor's gate above only
+	// covers users it treats as "using 2FA"). Late priority: run after core has resolved
+	// the user. See force_2fa_gate_api_login().
+	add_filter( 'authenticate', 'force_2fa_gate_api_login', 90, 3 );
 
 	// Bind the API-login app-password check to the account that authenticated (see
 	// force_2fa_filter_api_login_enable): record the user on each app-password auth.
 	add_action( 'application_password_did_authenticate', 'force_2fa_note_app_password_user', 10, 1 );
+
+	// Drop a user's memoized exemption when WordPress invalidates their user cache
+	// (role/membership changes fire this), so a mid-request mutation isn't served stale
+	// from force_2fa_compute_exemption()'s per-request cache.
+	add_action( 'clean_user_cache', 'force_2fa_flush_exemption_cache', 10, 1 );
 
 	// Optional blocking mode: gate interactive requests from users who have not yet
 	// configured 2FA, redirecting them to their profile's setup UI. No-ops entirely
@@ -1701,6 +2466,13 @@ function force_2fa_register_hooks() {
 	add_action( 'network_admin_notices', 'force_2fa_network_dependency_notice' );
 	add_action( 'admin_post_force_2fa_install_two_factor', 'force_2fa_handle_install_two_factor' );
 
+	// First-run enforcement-scope prompt: a one-time choice (all users / contributors+ /
+	// admins-only) folded into the admin notices, not a standing settings page. Shows
+	// until a choice is stored or FORCE_2FA_ENFORCED_CAPABILITY is defined in code.
+	add_action( 'admin_notices', 'force_2fa_scope_notice' );
+	add_action( 'network_admin_notices', 'force_2fa_scope_notice' );
+	add_action( 'admin_post_force_2fa_set_scope', 'force_2fa_handle_set_scope' );
+
 	// Keep the dependency notice honest after an AJAX plugin delete (see the
 	// function docblock): reload the Plugins screen when Two Factor is deleted.
 	add_action( 'admin_enqueue_scripts', 'force_2fa_enqueue_notice_refresh' );
@@ -1712,6 +2484,11 @@ function force_2fa_register_hooks() {
 
 // Network-only on multisite: refuse per-site activation (see the function docblock).
 register_activation_hook( __FILE__, 'force_2fa_block_single_site_activation' );
+
+// Clear the stored scope choice on deactivation, so reactivating re-prompts (the
+// intended "start over" path). The choice is an activation-time decision, not a
+// standing setting; uninstall.php purges it too.
+register_deactivation_hook( __FILE__, 'force_2fa_clear_scope_choice' );
 
 // Self-hosted updates from GitHub Releases (see force_2fa_bootstrap_self_update()).
 add_action( 'plugins_loaded', 'force_2fa_bootstrap_self_update' );

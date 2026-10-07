@@ -103,10 +103,9 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Enforce coverage floor
-        # Conservative starting floor: the untestable glue is @codeCoverageIgnore'd,
-        # so the counted lines are almost entirely tested. Raise this toward the
-        # actual combined figure (see the step summary above) as a ratchet.
-        run: php bin/coverage-threshold.php 80 coverage.xml coverage-no-two-factor.xml
+        # Keep a little headroom below the current combined figure while making
+        # meaningful regressions fail. Untestable glue is @codeCoverageIgnore'd.
+        run: php bin/coverage-threshold.php 90 coverage.xml coverage-no-two-factor.xml
       - name: Upload coverage artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -145,6 +144,19 @@ jobs:
       - name: Real WordPress multisite, network-only behavior end-to-end
         run: bash bin/multisite-e2e.sh
 
+  multisite-scope-e2e:
+    name: Multisite scope E2E (network-wide enforcement)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: sqlite3, pdo_sqlite
+      - name: Real WordPress multisite, network-wide capability + role scope end-to-end
+        run: bash bin/multisite-scope-e2e.sh
+
   api-login-e2e:
     name: API-login E2E (real Two Factor)
     runs-on: ubuntu-latest
@@ -157,6 +169,32 @@ jobs:
           extensions: sqlite3, pdo_sqlite
       - name: Real WordPress + Two Factor, API-login allowlist end-to-end
         run: bash bin/api-login-e2e.sh
+
+  scope-activation-e2e:
+    name: Scope-activation E2E (first-run choice)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: sqlite3, pdo_sqlite
+      - name: Real WordPress + Two Factor, activation-time scope choice end-to-end
+        run: bash bin/scope-activation-e2e.sh
+
+  email-fallback-e2e:
+    name: Email-fallback E2E (native method + primary)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: sqlite3, pdo_sqlite
+      - name: Real WordPress + Two Factor, email-as-fallback + primary end-to-end
+        run: bash bin/email-fallback-e2e.sh
 
   install-handler-e2e:
     name: Install-handler E2E (one-click install)
@@ -183,6 +221,22 @@ jobs:
           extensions: sqlite3, pdo_sqlite
       - name: Real WordPress + Two Factor, blocking-mode gate + mail encoder end-to-end
         run: bash bin/blocking-mode-e2e.sh
+
+  min-wp-e2e:
+    name: Minimum WordPress E2E (7.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          extensions: sqlite3, pdo_sqlite
+      # Proves the advertised minimum works end-to-end: on WordPress 7.0, the current
+      # Two Factor release installs and the plugin actually enforces. Guards against the
+      # floor drifting below Two Factor's own "Requires at least".
+      - name: Two Factor installs and enforces on the minimum WordPress (7.0)
+        run: WP_VERSION='7.0' bash bin/blocking-mode-e2e.sh
 
   update-e2e:
     name: Update E2E (GitHub Releases)

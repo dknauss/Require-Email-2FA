@@ -24,7 +24,18 @@ abstract class TestCase extends BaseTestCase {
 		$GLOBALS['__force2fa_cleared_crons']        = array();
 		$GLOBALS['__force2fa_current_blog_id']      = 1;
 		$GLOBALS['__force2fa_options']              = array();
+		$GLOBALS['__force2fa_site_options']         = array();
+		$GLOBALS['__force2fa_deactivation_hooks']   = array();
 		$GLOBALS['__force2fa_network_active']       = array();
+		$GLOBALS['__force2fa_super_admins']         = array();
+		$GLOBALS['__force2fa_site_caps']            = array();
+		$GLOBALS['__force2fa_site_roles']           = array();
+		$GLOBALS['__force2fa_user_blogs']           = array();
+		$GLOBALS['__force2fa_get_blogs_calls']      = 0;
+		$GLOBALS['force_2fa_exempt_cache']          = array();
+		$GLOBALS['__force2fa_wordfence_2fa_users']  = array();
+		$GLOBALS['__force2fa_available_providers']  = array();
+		unset( $GLOBALS['__force2fa_wordfence_throw'] );
 		unset( $GLOBALS['force_2fa_app_password_user_id'], $GLOBALS['__force2fa_providers'], $GLOBALS['__force2fa_is_network_admin'], $GLOBALS['__force2fa_user_caps'], $GLOBALS['__force2fa_is_multisite'], $GLOBALS['__force2fa_sites'], $GLOBALS['__force2fa_nonce_ok'] );
 
 		// Start every test from "Two Factor not on disk" so the on-disk check is
@@ -71,11 +82,53 @@ abstract class TestCase extends BaseTestCase {
 		return (string) ob_get_clean();
 	}
 
-	/** Register a WP_User that get_userdata() will return for its ID. */
-	protected function user( int $id, string $login, array $roles = array() ): \WP_User {
-		$user = new \WP_User( $id, $login, $roles );
+	/**
+	 * Register a WP_User that get_userdata() will return for its ID.
+	 *
+	 * $caps is a map of capability => true carried by the user for user_can()
+	 * checks (the enforcement-scope gate keys off 'manage_options'). When omitted,
+	 * the 'administrator' role implies manage_options — see the WP_User stub.
+	 */
+	protected function user( int $id, string $login, array $roles = array(), array $caps = array() ): \WP_User {
+		$user = new \WP_User( $id, $login, $roles, $caps );
 		$GLOBALS['__force2fa_users'][ $id ] = $user;
 		return $user;
+	}
+
+	/** Convenience: register an administrator (holds manage_options). */
+	protected function adminUser( int $id, string $login, array $roles = array( 'administrator' ) ): \WP_User {
+		return $this->user( $id, $login, $roles, array( 'manage_options' => true ) );
+	}
+
+	/** Override the capability that defines the enforcement scope ('' = everyone). */
+	protected function enforceCapability( string $capability ): void {
+		$this->setFilter( 'force_2fa_enforced_capability', $capability );
+	}
+
+	/** Toggle the multisite flag seen by is_multisite(). */
+	protected function multisite( bool $on = true ): void {
+		$GLOBALS['__force2fa_is_multisite'] = $on;
+	}
+
+	/** Mark a user ID as a network super admin (implies multisite). */
+	protected function superAdmin( int $id ): void {
+		$this->multisite( true );
+		$GLOBALS['__force2fa_super_admins'][] = $id;
+	}
+
+	/** Set a user's capabilities on a specific site for user_can_for_site(). */
+	protected function siteCaps( int $siteId, int $userId, array $caps ): void {
+		$GLOBALS['__force2fa_site_caps'][ $siteId ][ $userId ] = $caps;
+	}
+
+	/** List the site IDs a user belongs to, for get_blogs_of_user(). */
+	protected function userBlogs( int $userId, array $siteIds ): void {
+		$GLOBALS['__force2fa_user_blogs'][ $userId ] = $siteIds;
+	}
+
+	/** Set a user's roles on a specific site (read when re-hydrated in that context). */
+	protected function siteRoles( int $siteId, int $userId, array $roles ): void {
+		$GLOBALS['__force2fa_site_roles'][ $siteId ][ $userId ] = $roles;
 	}
 
 	/** Set a single-value user meta that get_user_meta( $id, $key, true ) will return. */
@@ -96,6 +149,21 @@ abstract class TestCase extends BaseTestCase {
 	/** Set the API-login allowlist seen by the plugin. */
 	protected function allowlist( array $entries ): void {
 		$this->setFilter( 'force_2fa_api_login_allowlist', $entries );
+	}
+
+	/** Mark a user as having active 2FA in the (stubbed) Wordfence integration. */
+	protected function wordfence2fa( int $userId ): void {
+		$GLOBALS['__force2fa_wordfence_2fa_users'][] = $userId;
+	}
+
+	/** Make the stubbed Wordfence integration throw, to exercise the fail-safe path. */
+	protected function wordfenceThrows(): void {
+		$GLOBALS['__force2fa_wordfence_throw'] = true;
+	}
+
+	/** Set the provider class-name keys Two Factor reports as available for a user. */
+	protected function availableProviders( int $userId, array $providerKeys ): void {
+		$GLOBALS['__force2fa_available_providers'][ $userId ] = $providerKeys;
 	}
 
 	/**

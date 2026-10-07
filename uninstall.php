@@ -7,15 +7,18 @@
  * WP_UNINSTALL_PLUGIN, so bail otherwise — this must never run on a normal
  * request.
  *
- * The plugin itself is stateless: it stores no options, user meta, or
- * transients — all of its behavior is runtime filters/actions that vanish the
- * moment the file stops loading (see force-email-two-factor.php). The ONLY
- * persistent footprint is created by the bundled Plugin Update Checker (PUC)
- * when self-update is active:
+ * The plugin is near-stateless: its only stored value is the first-run
+ * enforcement-scope choice, and everything else is runtime filters/actions that
+ * vanish the moment the file stops loading (see force-email-two-factor.php). The
+ * persistent footprint this file purges:
  *
  *   1. A site option `external_updates-<slug>` — cached update metadata written
- *      by PUC's StateStore via update_site_option().
+ *      by the bundled Plugin Update Checker's StateStore via update_site_option()
+ *      (present only when self-update is active).
  *   2. A cron event `puc_cron_check_updates-<slug>` — the periodic update check.
+ *   3. The option `force_2fa_enforced_capability` — the activation-time scope
+ *      choice (site option on single site, network option on multisite). Already
+ *      cleared on deactivation; purged here too, defensively.
  *
  * PUC clears the cron on DEACTIVATION (register_deactivation_hook →
  * removeUpdaterCron), but nothing deletes the option, and on multisite the cron
@@ -52,6 +55,13 @@ function force_2fa_clear_update_cron( $hook ) {
 // delete is delete_site_option() — which resolves to wp_options on single site
 // and network meta (wp_sitemeta) on multisite, covering both storage locations.
 delete_site_option( $force_2fa_option_name );
+
+// Activation-time enforcement-scope choice (see force_2fa_scope_choice_set()). Cleared
+// on deactivation already; purge here too in case uninstall runs from an odd state.
+// Literal (not the FORCE_2FA_SCOPE_OPTION constant — the plugin is not loaded here);
+// clear both storage locations since the site vs network option depends on multisite.
+delete_option( 'force_2fa_enforced_capability' );
+delete_site_option( 'force_2fa_enforced_capability' );
 
 // Update-check cron. On multisite the plugin is network-active and PUC loads on
 // every site, so the event may be scheduled in more than one site's cron array;
