@@ -14,7 +14,7 @@
     <arg value="sp"/>
 
     <!-- Verify the plugin runs on every PHP version it claims to support. -->
-    <config name="testVersion" value="7.2-"/>
+    <config name="testVersion" value="7.4-"/>
     <rule ref="PHPCompatibility"/>
 
     <!-- Full WordPress coding standards: Core + Extra + Docs — style, security,

@@ -15,7 +15,7 @@ Install dependencies:
 composer install
 ```
 
-The plugin runtime supports PHP 7.2+, but the dev tools intentionally run on modern PHP. Production compatibility is enforced with `php -l` across PHP 7.2–8.4 in CI and PHPCompatibility with `testVersion 7.2-`.
+The plugin runtime supports PHP 7.4+, but the dev tools intentionally run on modern PHP. Production compatibility is enforced with `php -l` across PHP 7.4–8.4 in CI and PHPCompatibility with `testVersion 7.4-`.
 
 ## Before opening a pull request
 

@@ -8,7 +8,7 @@
 [![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](LICENSE)
 [![Requires WordPress 7.0+](https://img.shields.io/badge/WordPress-7.0%2B-21759b?logo=wordpress&logoColor=white)](https://wordpress.org/)
 [![Tested up to WordPress 7.0](https://img.shields.io/badge/tested%20up%20to-WordPress%207.0-21759b?logo=wordpress&logoColor=white)](https://wordpress.org/download/)
-[![Requires PHP 7.2+](https://img.shields.io/badge/PHP-7.2%2B-777bb4?logo=php&logoColor=white)](https://www.php.net/supported-versions.php)
+[![Requires PHP 7.4+](https://img.shields.io/badge/PHP-7.4%2B-777bb4?logo=php&logoColor=white)](https://www.php.net/supported-versions.php)
 [![Requires Plugin: Two Factor](https://img.shields.io/badge/requires-Two%20Factor-3858e9.svg)](https://wordpress.org/plugins/two-factor/)
 [![Try in WordPress Playground](https://img.shields.io/badge/try-WordPress%20Playground-3858e9?logo=wordpress&logoColor=white)](https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/dknauss/Require-Email-2FA/main/playground/demo-blueprint.json)
 
@@ -738,7 +738,7 @@ the plugin as a control.
 
 ## Development
 
-> **PHP version:** the *plugin* supports PHP 7.2+ (enforced by the lint matrix and
+> **PHP version:** the *plugin* supports PHP 7.4+ (enforced by the lint matrix and
 > PHPCompatibility). The *dev tooling* (PHPUnit 11) requires **PHP 8.2+**, so run
 > `composer install` and the test suite on PHP 8.2 or newer.
 
@@ -753,7 +753,7 @@ Tests run on a zero-dependency stub bootstrap (no WordPress install required):
 ```sh
 composer install
 composer test                       # PHPUnit: unit + integration
-composer phpcs                      # PHPCompatibility (7.2+) + WordPress (full)
+composer phpcs                      # PHPCompatibility (7.4+) + WordPress (full)
 composer phpcbf                     # auto-fix coding-standards issues
 composer check                      # phpcs + phpstan + all tests
 vendor/bin/phpunit --testsuite integration   # one suite
@@ -767,7 +767,7 @@ bash bin/update-e2e.sh              # disposable real site, GitHub Release updat
 
 Coding standards are the full **WordPress** standard — Core + Extra + Docs (style,
 security, and documentation sniffs) — plus **PHPCompatibility** with
-`testVersion 7.2-`, scoped to the production files (`phpcs.xml.dist`). The one
+`testVersion 7.4-`, scoped to the production files (`phpcs.xml.dist`). The one
 excluded sub-rule (`InlineComment.InvalidEndChar`) is documented inline in the
 ruleset; it conflicts with tool directives (`@codeCoverageIgnore`, `phpcs:`) and the
 intentional commented-out example config.
@@ -775,8 +775,8 @@ intentional commented-out example config.
 CI ([GitHub Actions](.github/workflows/ci.yml)) runs on every push and pull
 request:
 
-- **lint** — `php -l`, PHP 7.2–8.4
-- **PHPCS / PHPCompatibility** — coding standards + the PHP 7.2 floor
+- **lint** — `php -l`, PHP 7.4–8.4
+- **PHPCS / PHPCompatibility** — coding standards + the PHP 7.4 floor
 - **PHPUnit** — unit + integration, PHP 8.2–8.4
 - **coverage** — combined PHPUnit line coverage across the normal and
   Two-Factor-absent suites (PCOV), enforced at a 90% floor; summary in the job's
