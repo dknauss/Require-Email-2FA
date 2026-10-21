@@ -775,9 +775,9 @@ intentional commented-out example config.
 CI ([GitHub Actions](.github/workflows/ci.yml)) runs on every push and pull
 request:
 
-- **lint** — `php -l`, PHP 7.4–8.4
+- **lint** — `php -l`, PHP 7.4–8.5
 - **PHPCS / PHPCompatibility** — coding standards + the PHP 7.4 floor
-- **PHPUnit** — unit + integration, PHP 8.2–8.4
+- **PHPUnit** — unit + integration, PHP 8.2–8.5
 - **coverage** — combined PHPUnit line coverage across the normal and
   Two-Factor-absent suites (PCOV), enforced at a 90% floor; summary in the job's
   GitHub summary and Clover reports uploaded as artifacts
