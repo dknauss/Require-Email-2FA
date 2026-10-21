@@ -16,7 +16,7 @@ without expanding the runtime policy surface.
 
 - Keep dependency maintenance boring and regular. Prefer semver-safe updates first
   (for example PHPStan patch releases), and evaluate major PHPUnit/PHPCS upgrades
-  separately so the PHP 7.2 runtime-compatibility policy remains clear.
+  separately so the PHP 7.4 runtime-compatibility policy remains clear.
 - Preserve the one-file production architecture unless the main plugin file grows
   enough that auditability suffers. If it ever splits, keep security decisions as
   pure functions and keep WordPress glue thin.

@@ -20,7 +20,7 @@ Production code is only three files, all procedural PHP with `force_2fa_` / `FOR
 composer install          # PHP 8.2+ and Composer 2 required for dev tooling
 composer check            # phpcs + phpstan + all phpunit suites — run before every PR
 composer test             # vendor/bin/phpunit (unit + integration suites)
-composer phpcs            # WordPress coding standards + PHPCompatibility (7.2-)
+composer phpcs            # WordPress coding standards + PHPCompatibility (7.4-)
 composer phpcbf           # auto-fix phpcs violations
 composer phpstan          # PHPStan level 5 (uses phpstan-baseline.neon)
 ```
@@ -47,7 +47,7 @@ bash bin/blocking-mode-e2e.sh    # required-setup blocking mode with real Two Fa
 bash bin/update-e2e.sh           # real update from a GitHub Release asset (set GITHUB_TOKEN)
 ```
 
-The plugin **runtime** supports PHP 7.2+; dev tooling deliberately requires modern PHP. Cross-version safety is enforced by `php -l` across 7.2–8.4 and PHPCompatibility (`testVersion 7.2-`) in CI — do not use post-7.2 syntax in the three production files (tests and `bin/` may use newer syntax).
+The plugin **runtime** supports PHP 7.4+; dev tooling deliberately requires modern PHP. Cross-version safety is enforced by `php -l` across 7.4–8.4 and PHPCompatibility (`testVersion 7.4-`) in CI — do not use post-7.4 syntax in the three production files (tests and `bin/` may use newer syntax).
 
 ## Architecture
 
@@ -91,4 +91,4 @@ PHPStan runs at level 5 over the three production files only. Two Factor is abse
 - **Docs travel with behavior:** `README.md` (GitHub) and `readme.txt` (WordPress-style) describe the same behavior in parallel and both need updating when behavior, requirements, or rollout guidance changes; `docs/DEPLOYMENT.md` covers the two update modes.
 - **Keep the surface minimal** — near-statelessness is a design value. The only deliberate exceptions are the first-run scope notice + its single option (`force_2fa_enforced_capability`, purged on deactivate and uninstall). Don't add further UI, options, database tables, cron jobs, or remote calls without a strong reason (`uninstall.php`'s header documents the persistent footprint).
 - **Fail-safe over fail-closed on missing dependency:** if Two Factor or a provider is absent, avoid fatals and avoid corrupting users' provider lists.
-- CI (`.github/workflows/ci.yml`) runs lint (PHP 7.2–8.4), PHPCS, PHPStan, PHPUnit (8.2–8.4), coverage, a Playground integration job, a minimum-WordPress (7.0) E2E, and all E2E scripts; CodeQL and Semgrep also scan PRs. All GitHub Actions are pinned to full commit SHAs — keep that when editing workflows.
+- CI (`.github/workflows/ci.yml`) runs lint (PHP 7.4–8.4), PHPCS, PHPStan, PHPUnit (8.2–8.4), coverage, a Playground integration job, a minimum-WordPress (7.0) E2E, and all E2E scripts; CodeQL and Semgrep also scan PRs. All GitHub Actions are pinned to full commit SHAs — keep that when editing workflows.
