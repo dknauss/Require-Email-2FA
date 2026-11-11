@@ -4,6 +4,11 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    # PHPUnit 12 requires PHP 8.3 and 13 requires PHP 8.4, above this repo's CI
+    # floor. Revisit when the floor rises.
+    ignore:
+      - dependency-name: "phpunit/phpunit"
+        versions: [">= 12"]
     open-pull-requests-limit: 5
     # Batch the weekly dev-tooling bumps into a single PR. With branch protection
     # set to strict + enforce_admins, one grouped PR means one merge instead of a
