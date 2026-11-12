@@ -2353,7 +2353,7 @@ function force_2fa_bootstrap_self_update() {
 	// one value with nothing hardcoded to this particular fork.
 	$slug = basename( __DIR__ );
 
-	$update_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+	$update_checker = \YahnisElsts\PluginUpdateChecker\v6\PucFactory::buildUpdateChecker(
 		$repo_url,
 		__FILE__,
 		$slug

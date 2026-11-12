@@ -1,7 +1,7 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Call to an undefined method YahnisElsts\\PluginUpdateChecker\\v5p7\\Vcs\\Api\:\:enableReleaseAssets\(\)\.$#'
+			message: '#^Call to an undefined method YahnisElsts\\PluginUpdateChecker\\v6p0\\Vcs\\Api\:\:enableReleaseAssets\(\)\.$#'
 			identifier: method.notFound
 			count: 1
 			path: force-email-two-factor.php
